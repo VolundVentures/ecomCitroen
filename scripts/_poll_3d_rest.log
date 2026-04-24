@@ -1,0 +1,32 @@
+[22:40:39][berlingo] iter=1 status=processing
+[22:40:39][c5] iter=1 status=processing
+[22:40:55][berlingo] iter=2 status=processing
+[22:40:55][c5] iter=2 status=processing
+[22:41:10][berlingo] iter=3 status=processing
+[22:41:10][c5] iter=3 status=processing
+[22:41:26][c5] iter=4 status=processing
+[22:41:26][berlingo] iter=4 status=processing
+[22:41:41][c5] iter=5 status=processing
+[22:41:41][berlingo] iter=5 status=processing
+[22:41:57][c5] iter=6 status=processing
+[22:41:57][berlingo] iter=6 status=processing
+[22:42:12][c5] iter=7 status=processing
+[22:42:12][berlingo] iter=7 status=processing
+[22:42:28][c5] iter=8 status=processing
+[22:42:28][berlingo] iter=8 status=processing
+[22:42:43][berlingo] iter=9 status=processing
+[22:42:43][c5] iter=9 status=processing
+[22:42:59][c5] iter=10 status=processing
+[22:42:59][berlingo] iter=10 status=processing
+[22:43:14][c5] iter=11 status=processing
+[22:43:14][berlingo] iter=11 status=processing
+[22:43:30][c5] iter=12 status=processing
+[22:43:30][berlingo] iter=12 status=processing
+[22:43:46][berlingo] iter=13 status=processing
+[22:43:48][c5] iter=13 status=processing
+[22:44:02][berlingo] iter=14 status=succeeded
+[22:44:04][c5] iter=14 status=processing
+-rw-r--r-- 1 Zakaria 197121 94142088 Apr 16 22:44 apps/store-citroen-ma/public/generated/3d/berlingo.glb
+[22:44:19][c5] iter=15 status=succeeded
+-rw-r--r-- 1 Zakaria 197121 89742200 Apr 16 22:44 apps/store-citroen-ma/public/generated/3d/c5-aircross.glb
+all-done

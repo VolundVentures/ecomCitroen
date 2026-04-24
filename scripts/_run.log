@@ -1,0 +1,16 @@
+manifest written
+
+==========================================
+BATCH COMPLETE — 58s
+==========================================
+FAIL|3d-c3-aircross|998ym6aj51rmw0cxk009b73q34|Unsupported image format: . Supported formats: .jpeg, .jpg, .png, .webp
+OK|bd-atlas-mountains|57ccn2aa8xrmy0cxk00b476sgm|c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/atlas-mountains.jpg|760357
+OK|bd-casa-corniche|ds1g8maa15rmy0cxk0080aet7m|c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/casa-corniche.jpg|597181
+FAIL|bd-chefchaouen||429
+OK|bd-essaouira-beach|wt144tta7srmw0cxk00aybnhe4|c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/essaouira-beach.jpg|203637
+OK|bd-marrakech-medina|qse1a2t9v5rmy0cxk009accejg|c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/marrakech-medina.jpg|684596
+FAIL|bd-rabat-hassan||429
+FAIL|hero-berlingo||429
+FAIL|hero-c3-aircross||429
+OK|hero-c5-aircross|37pqzwa9q9rmy0cxk00aa840sg|c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/c5-aircross.jpg|697911
+FAIL|hero-homepage||429

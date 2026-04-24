@@ -1,0 +1,138 @@
+{
+  "nav": {
+    "models": "Models",
+    "configurator": "Configurator",
+    "financing": "Financing",
+    "dealers": "Dealers",
+    "account": "Account"
+  },
+  "hero": {
+    "eyebrow": "A new generation",
+    "title": "Your next Citroën, configured in conversation.",
+    "sub": "Speak, see, decide. Rihla walks with you at every step, in your language. A new kind of car store.",
+    "cta_primary": "Talk to Rihla",
+    "cta_voice": "Use your voice",
+    "cta_secondary": "Explore the range"
+  },
+  "heroStats": {
+    "stat1_kpi": "× 3",
+    "stat1_label": "Faster path to decision",
+    "stat2_kpi": "< 12 min",
+    "stat2_label": "From first question to reservation",
+    "stat3_kpi": "4 languages",
+    "stat3_label": "Darija · Français · العربية · English",
+    "stat4_kpi": "24 / 7",
+    "stat4_label": "Always available, never pushy"
+  },
+  "models": {
+    "section_eyebrow": "The 2026 range",
+    "section_title": "Choose your Citroën",
+    "section_sub": "Six cars built for Morocco. Configure them, see them in your world, picture yourself at the wheel.",
+    "starting_from": "Starting from",
+    "select": "Discover",
+    "all_range": "Full range"
+  },
+  "detail": {
+    "configure": "Configure",
+    "ask_rihla": "Ask Rihla",
+    "reserve": "Reserve this build",
+    "book_test_drive": "Book a test drive",
+    "download_brochure": "Download brochure",
+    "from": "from",
+    "monthly": "/mo",
+    "gallery": "Gallery",
+    "features": "Features",
+    "specs": "Specs",
+    "trims": "Trims"
+  },
+  "buyingPath": {
+    "eyebrow": "How it works",
+    "title_lead": "Five",
+    "title_accent": "simple",
+    "title_tail": " steps, from first hello to keys.",
+    "sub": "A funnel designed for the Moroccan market. No hidden paperwork, no mystery discounts.",
+    "chip": "Full path — 12 minutes on average",
+    "step1_title": "Say hello to Rihla",
+    "step1_body": "Describe what you need in Darija, French or English. She understands and guides you.",
+    "step1_cta": "Start",
+    "step2_title": "Configure your Citroën",
+    "step2_body": "Colour, trim, options — visualise the result in real time.",
+    "step2_cta": "See the range",
+    "step3_title": "Understand the real cost",
+    "step3_body": "Monthly, 5-year TCO, 3 financing routes side by side.",
+    "step3_cta": "Open advisor",
+    "step4_title": "Lock it in",
+    "step4_body": "A refundable deposit secures your configuration with the dealer.",
+    "step4_cta": "Reserve",
+    "step5_title": "Delivery & test drive",
+    "step5_body": "The dealer calls you within 2 hours to finalise delivery and the test drive.",
+    "step5_cta": "Find a dealer"
+  },
+  "bento": {
+    "eyebrow": "What's new",
+    "title_lead": "A car store",
+    "title_accent": "that talks",
+    "title_tail": ", understands, and walks with you.",
+    "sub": "Six capabilities built for the Moroccan market. Each one calibrated to simplify your decision, not dazzle.",
+    "tile1_title": "An advisor who actually gets you",
+    "tile1_body": "Rihla speaks your language, remembers what you like, and adapts to your session. Like a sales rep who's known you forever.",
+    "tile2_title": "Configure by talking, not clicking",
+    "tile2_body": "Describe the car you want — colour, trim, vibe. Your Citroën appears and morphs in real time.",
+    "tile3_title": "Picture yourself at the wheel",
+    "tile3_body": "Your exact build, set in your street, your beach, your medina. Ready to share with your family.",
+    "tile4_title": "An ad that stars you",
+    "tile4_body": "Thirty cinematic seconds. Your car, your favourite road, your voice. A keepsake, or a dream to share.",
+    "tile5_title": "Money, finally transparent",
+    "tile5_body": "Monthly payment, real 5-year cost, three options side by side. Explained like a friend would. No traps, no surprises.",
+    "tile6_title": "From chat to road, no friction",
+    "tile6_body": "Reserve in conversation. Your dealer receives everything they need to know before they even call."
+  },
+  "finalCta": {
+    "eyebrow": "Say hello to Rihla",
+    "title_lead": "Your next Citroën is",
+    "title_accent": "two conversations",
+    "title_tail": "away.",
+    "sub": "Try it, configure it, reserve it. A new way to buy a car, designed around you.",
+    "cta_primary": "Talk to Rihla",
+    "cta_secondary": "Find a dealer"
+  },
+  "footer": {
+    "description": "Morocco's first agentic car store. From the first word to the first road, in your language.",
+    "explore": "Explore",
+    "account": "Account",
+    "legal_col": "Legal",
+    "orders": "My orders",
+    "service": "Service",
+    "my_account": "My account",
+    "legal": "Legal notices",
+    "privacy": "Data protection",
+    "terms": "Terms of sale",
+    "rights": "© 2026 Stellantis Morocco. All brands are the property of their respective owners."
+  },
+  "rihla": {
+    "title": "Rihla",
+    "subtitle": "Your Citroën journey companion",
+    "placeholder": "Type or speak in Darija, French or English...",
+    "greeting": "Hi! I'm Rihla. I can help you choose, configure and reserve your Citroën. Where should we start?"
+  },
+  "dealers": {
+    "eyebrow": "Official dealers",
+    "title": "Your Citroën, close to home.",
+    "sub": "Find your nearest official dealer. Direct WhatsApp contact, test drives by appointment, delivery across Morocco.",
+    "call": "Call",
+    "whatsapp": "WhatsApp",
+    "directions": "Directions"
+  },
+  "financing_page": {
+    "eyebrow": "Financing & true cost",
+    "title": "What does it really cost?",
+    "sub": "Monthly payments across several terms, 5-year total cost, side by side. Nothing hidden. Rihla can walk you through it."
+  },
+  "reserve": {
+    "eyebrow": "Reservation",
+    "title": "Finalise your build",
+    "sub": "One last step before your dealer reaches out. A small refundable deposit secures your choice.",
+    "pay": "Reserve",
+    "back": "Back to configurator"
+  }
+}

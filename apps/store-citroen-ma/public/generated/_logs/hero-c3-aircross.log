@@ -1,0 +1,5 @@
+[hero-c3-aircross] POST nano-banana-pro ratio=16:9
+[hero-c3-aircross] id= status=429
+[hero-c3-aircross] FAILED: 429
+[hero-c3-aircross] retry POST ratio=16:9
+[hero-c3-aircross] id=vegr8a6jtnrmt0cxk01a3zhrp8 status=succeeded

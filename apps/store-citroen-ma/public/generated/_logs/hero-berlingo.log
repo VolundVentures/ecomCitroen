@@ -1,0 +1,5 @@
+[hero-berlingo] POST nano-banana-pro ratio=16:9
+[hero-berlingo] id= status=429
+[hero-berlingo] FAILED: 429
+[hero-berlingo] retry POST ratio=16:9
+[hero-berlingo] id=a426v4ez8xrmy0cxk0193awx94 status=succeeded

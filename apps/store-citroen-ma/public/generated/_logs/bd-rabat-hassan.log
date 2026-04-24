@@ -1,0 +1,5 @@
+[bd-rabat-hassan] POST nano-banana-pro ratio=3:2
+[bd-rabat-hassan] id= status=429
+[bd-rabat-hassan] FAILED: 429
+[bd-rabat-hassan] retry POST ratio=3:2
+[bd-rabat-hassan] id=mqgttkfngsrmy0cxk018whjeg8 status=succeeded

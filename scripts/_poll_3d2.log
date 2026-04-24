@@ -1,0 +1,17 @@
+[22:29:23] iter=1 status=processing
+[22:29:39] iter=2 status=processing
+[22:29:54] iter=3 status=processing
+[22:30:10] iter=4 status=processing
+[22:30:25] iter=5 status=processing
+[22:30:41] iter=6 status=processing
+[22:30:56] iter=7 status=processing
+[22:31:12] iter=8 status=processing
+[22:31:27] iter=9 status=processing
+[22:31:43] iter=10 status=processing
+[22:31:59] iter=11 status=processing
+[22:32:14] iter=12 status=processing
+[22:32:30] iter=13 status=processing
+[22:32:45] iter=14 status=processing
+[22:33:00] iter=15 status=succeeded
+OUT=https://replicate.delivery/xezq/ee0eA2uiOhZfXQcp84wKGOGIKfr2AGeENPBaruXlzpUsgH8mF/tmp6a2pqt4t.glb
+-rw-r--r-- 1 Zakaria 197121 83630592 Apr 16 22:33 apps/store-citroen-ma/public/generated/3d/c3-aircross.glb

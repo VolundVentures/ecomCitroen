@@ -1,0 +1,5 @@
+[bd-chefchaouen] POST nano-banana-pro ratio=3:2
+[bd-chefchaouen] id= status=429
+[bd-chefchaouen] FAILED: 429
+[bd-chefchaouen] retry POST ratio=3:2
+[bd-chefchaouen] id=1m0f7x7ad9rmy0cxk01brvc7f4 status=succeeded

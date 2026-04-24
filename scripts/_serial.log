@@ -1,0 +1,7 @@
+ref=https://api.replicate.com/v1/files/ODM2ZjZlODctNGVkZC00YTlmLTg3NTItNTRiNWFiOGE0OTE3
+[hero-c5-aircross-v4] attempt=1 id=vmk8147gcnrmw0cxk068898vvm status=succeeded
+[hero-c5-aircross-v4] -> c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/c5-aircross.jpg
+--- sleeping 25s to avoid rate limit ---
+ref=https://api.replicate.com/v1/files/MDJhZGE4NTEtZWU1My00NjIwLTg2NGEtNmNhOTQzYmMxMGNi
+[hero-berlingo-v4] attempt=1 id=g337s4esnnrmt0cxk06s6prrvc status=succeeded
+[hero-berlingo-v4] -> c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/berlingo.jpg

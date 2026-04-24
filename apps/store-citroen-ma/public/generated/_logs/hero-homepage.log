@@ -1,0 +1,5 @@
+[hero-homepage] POST nano-banana-pro ratio=21:9
+[hero-homepage] id= status=429
+[hero-homepage] FAILED: 429
+[hero-homepage] retry POST ratio=21:9
+[hero-homepage] id=wvpqgby6qsrmr0cxk01a536et4 status=succeeded

@@ -1,0 +1,138 @@
+{
+  "nav": {
+    "models": "Modèles",
+    "configurator": "Configurateur",
+    "financing": "Financement",
+    "dealers": "Concessionnaires",
+    "account": "Mon espace"
+  },
+  "hero": {
+    "eyebrow": "Nouvelle génération",
+    "title": "Votre prochaine Citroën se choisit par la conversation.",
+    "sub": "Parlez, visualisez, décidez. Rihla vous accompagne à chaque étape — dans votre langue, à votre rythme. Un nouveau genre de magasin automobile.",
+    "cta_primary": "Parler à Rihla",
+    "cta_voice": "Parler en direct",
+    "cta_secondary": "Découvrir la gamme"
+  },
+  "heroStats": {
+    "stat1_kpi": "× 3",
+    "stat1_label": "Parcours d'achat accéléré",
+    "stat2_kpi": "< 12 min",
+    "stat2_label": "De la première question à la réservation",
+    "stat3_kpi": "4 langues",
+    "stat3_label": "Darija · Français · العربية · English",
+    "stat4_kpi": "24 / 7",
+    "stat4_label": "Toujours disponible, jamais pressante"
+  },
+  "models": {
+    "section_eyebrow": "La gamme 2026",
+    "section_title": "Choisissez votre Citroën",
+    "section_sub": "Six voitures pensées pour le Maroc. Configurez-les, voyez-les dans votre quotidien, projetez-vous au volant.",
+    "starting_from": "À partir de",
+    "select": "Découvrir",
+    "all_range": "Toute la gamme"
+  },
+  "detail": {
+    "configure": "Configurer",
+    "ask_rihla": "Demander à Rihla",
+    "reserve": "Réserver cette configuration",
+    "book_test_drive": "Réserver un essai",
+    "download_brochure": "Télécharger la brochure",
+    "from": "à partir de",
+    "monthly": "/mois",
+    "gallery": "Galerie",
+    "features": "Équipements",
+    "specs": "Caractéristiques",
+    "trims": "Finitions"
+  },
+  "buyingPath": {
+    "eyebrow": "Comment ça marche",
+    "title_lead": "Cinq étapes",
+    "title_accent": "simples",
+    "title_tail": ", du premier bonjour aux clés.",
+    "sub": "Un parcours dessiné pour le marché marocain. Pas de paperasse cachée, pas de rabais mystérieux.",
+    "chip": "Parcours complet — 12 minutes en moyenne",
+    "step1_title": "Dites bonjour à Rihla",
+    "step1_body": "Décrivez votre besoin en darija, français ou anglais. Elle vous comprend et vous oriente.",
+    "step1_cta": "Démarrer",
+    "step2_title": "Configurez votre Citroën",
+    "step2_body": "Couleur, finition, options — visualisez le résultat en temps réel.",
+    "step2_cta": "Voir la gamme",
+    "step3_title": "Comprenez le coût réel",
+    "step3_body": "Mensualités, TCO sur 5 ans, 3 financements comparés côte à côte.",
+    "step3_cta": "Ouvrir le conseiller",
+    "step4_title": "Sécurisez votre choix",
+    "step4_body": "Un acompte remboursable valide votre configuration auprès du concessionnaire.",
+    "step4_cta": "Réserver",
+    "step5_title": "Livraison & essai",
+    "step5_body": "Le concessionnaire vous rappelle sous 2 heures pour finaliser livraison et essai.",
+    "step5_cta": "Trouver un point"
+  },
+  "bento": {
+    "eyebrow": "Ce qui est nouveau",
+    "title_lead": "Un magasin automobile",
+    "title_accent": "qui dialogue",
+    "title_tail": ", comprend et vous accompagne.",
+    "sub": "Six capacités conçues pour le marché marocain. Chacune calibrée pour simplifier votre décision, pas pour impressionner.",
+    "tile1_title": "Une conseillère qui vous comprend",
+    "tile1_body": "Rihla parle votre langue, se souvient de vos préférences, et s'adapte à votre session. Comme un vendeur qui vous connaîtrait depuis toujours.",
+    "tile2_title": "Configurez en parlant, pas en cliquant",
+    "tile2_body": "Décrivez la voiture que vous voulez — la couleur, la finition, l'ambiance. Votre Citroën apparaît et se transforme en direct.",
+    "tile3_title": "Voyez-vous déjà au volant",
+    "tile3_body": "Votre configuration exacte, posée dans votre rue, votre plage, votre médina. Prête à partager avec votre famille.",
+    "tile4_title": "Une pub qui vous met en scène",
+    "tile4_body": "Trente secondes de cinéma. Votre voiture, votre route préférée, votre voix. Un souvenir, ou un rêve à partager.",
+    "tile5_title": "L'argent, enfin transparent",
+    "tile5_body": "Mensualité, coût réel sur cinq ans, trois options côte à côte. Expliqué comme à un ami. Sans pièges, sans surprises.",
+    "tile6_title": "Du chat à la route, sans friction",
+    "tile6_body": "Vous réservez en conversation. Votre concessionnaire reçoit tout ce qu'il doit savoir avant même de vous appeler."
+  },
+  "finalCta": {
+    "eyebrow": "Dites bonjour à Rihla",
+    "title_lead": "Votre prochaine Citroën est à",
+    "title_accent": "deux conversations",
+    "title_tail": "d'ici.",
+    "sub": "Essayez, configurez, réservez. Une nouvelle manière d'acheter sa voiture, pensée pour vous.",
+    "cta_primary": "Parler à Rihla",
+    "cta_secondary": "Voir les concessionnaires"
+  },
+  "footer": {
+    "description": "La première boutique auto agentique du Maroc. Du premier mot à la première route, dans votre langue.",
+    "explore": "Explorer",
+    "account": "Compte",
+    "legal_col": "Légal",
+    "orders": "Mes commandes",
+    "service": "Service & entretien",
+    "my_account": "Mon espace",
+    "legal": "Mentions légales",
+    "privacy": "Protection des données",
+    "terms": "Conditions de vente",
+    "rights": "© 2026 Stellantis Maroc. Toutes les marques sont la propriété de leurs titulaires respectifs."
+  },
+  "rihla": {
+    "title": "Rihla",
+    "subtitle": "Votre compagnon de voyage Citroën",
+    "placeholder": "Écrivez ou parlez en darija, français ou anglais...",
+    "greeting": "Bonjour ! Je suis Rihla. Je peux vous aider à choisir, configurer et réserver votre Citroën. Par où on commence ?"
+  },
+  "dealers": {
+    "eyebrow": "Concessionnaires officiels",
+    "title": "Votre Citroën, près de chez vous.",
+    "sub": "Retrouvez le concessionnaire officiel le plus proche. Prise de contact WhatsApp directe, essais sur rendez-vous, livraison partout au Maroc.",
+    "call": "Appeler",
+    "whatsapp": "Écrire sur WhatsApp",
+    "directions": "Itinéraire"
+  },
+  "financing_page": {
+    "eyebrow": "Financement & coût réel",
+    "title": "Combien ça coûte, vraiment ?",
+    "sub": "Mensualités sur plusieurs durées, coût total sur cinq ans, comparé côte à côte. Rien n'est caché. Rihla peut commenter et ajuster."
+  },
+  "reserve": {
+    "eyebrow": "Réservation",
+    "title": "Finaliser votre configuration",
+    "sub": "Une dernière étape avant que votre concessionnaire ne prenne contact. Un petit acompte remboursable sécurise votre choix.",
+    "pay": "Réserver",
+    "back": "Retour au configurateur"
+  }
+}

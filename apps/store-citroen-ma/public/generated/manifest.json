@@ -1,0 +1,94 @@
+{
+  "generated_at": "2026-04-16T20:35:08.911Z",
+  "elapsed_seconds": 58,
+  "assets": [
+    {
+      "slug": "hero-homepage",
+      "prompt": "Wide cinematic shot of a metallic sand-beige 2026 Citroen C3 Aircross parked on a minimalist coastal road at golden hour near Essaouira Morocco, soft Atlantic haze, abstract modern architecture in background, subject positioned in right third of frame, generous negative sky space on left for overlaid text, sophisticated editorial mood.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/homepage.jpg",
+      "status": "failed",
+      "prediction_id": null,
+      "error": "429"
+    },
+    {
+      "slug": "hero-c3-aircross",
+      "prompt": "A 2026 Citroen C3 Aircross SUV in a soft two-tone sage-green-over-graphite livery, captured three-quarter front on a Moroccan riad courtyard at dawn, warm terracotta walls behind, palm shadows across the hood, shallow depth of field.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/c3-aircross.jpg",
+      "status": "failed",
+      "prediction_id": null,
+      "error": "429"
+    },
+    {
+      "slug": "hero-c5-aircross",
+      "prompt": "A 2026 Citroen C5 Aircross SUV in pearl white, parked at a quiet modernist villa near the Atlas mountains at early morning, soft rose mountain light, minimalist poolside composition, three-quarter rear angle showing sculpted rear lights.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/c5-aircross.jpg",
+      "status": "succeeded",
+      "prediction_id": "37pqzwa9q9rmy0cxk00aa840sg",
+      "size_bytes": 697911
+    },
+    {
+      "slug": "hero-berlingo",
+      "prompt": "A 2026 Citroen Berlingo family van in deep metallic petrol-blue parked at a sunlit coastal viewpoint over Chefchaouen with soft blue-painted Moroccan village walls behind, three-quarter front angle, a picnic basket and bicycles subtly visible, warm candid lifestyle mood.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/hero/berlingo.jpg",
+      "status": "failed",
+      "prediction_id": null,
+      "error": "429"
+    },
+    {
+      "slug": "bd-marrakech-medina",
+      "prompt": "Empty cobblestone alley in Marrakech medina at golden hour, warm ochre walls, dappled light, no people, no cars, ready to composite a vehicle into the foreground, editorial campaign backdrop.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/marrakech-medina.jpg",
+      "status": "succeeded",
+      "prediction_id": "qse1a2t9v5rmy0cxk009accejg",
+      "size_bytes": 684596
+    },
+    {
+      "slug": "bd-casa-corniche",
+      "prompt": "Empty Casablanca corniche promenade at blue hour, soft Atlantic mist, minimalist art-deco streetlamps, wet pavement reflections, no people, no cars, ready to composite a vehicle, editorial campaign backdrop.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/casa-corniche.jpg",
+      "status": "succeeded",
+      "prediction_id": "ds1g8maa15rmy0cxk0080aet7m",
+      "size_bytes": 597181
+    },
+    {
+      "slug": "bd-essaouira-beach",
+      "prompt": "Wide empty beach at Essaouira at early morning, pale sand, distant fishing boats, low haze on horizon, no people, no cars, ready to composite a vehicle, editorial campaign backdrop.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/essaouira-beach.jpg",
+      "status": "succeeded",
+      "prediction_id": "wt144tta7srmw0cxk00aybnhe4",
+      "size_bytes": 203637
+    },
+    {
+      "slug": "bd-chefchaouen",
+      "prompt": "Empty quiet street in Chefchaouen between soft blue-washed walls at late afternoon, no people, no cars, ready to composite a vehicle, editorial campaign backdrop.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/chefchaouen.jpg",
+      "status": "failed",
+      "prediction_id": null,
+      "error": "429"
+    },
+    {
+      "slug": "bd-atlas-mountains",
+      "prompt": "Empty mountain switchback road in the High Atlas at golden hour, warm amber rock faces, distant snow peaks, no people, no cars, ready to composite a vehicle, editorial campaign backdrop.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/atlas-mountains.jpg",
+      "status": "succeeded",
+      "prediction_id": "57ccn2aa8xrmy0cxk00b476sgm",
+      "size_bytes": 760357
+    },
+    {
+      "slug": "bd-rabat-hassan",
+      "prompt": "Empty plaza near Hassan Tower in Rabat at early morning, warm travertine stones, soft mist, minimalist historic columns in background, no people, no cars, ready to composite a vehicle, editorial campaign backdrop.",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/backdrops/rabat-hassan.jpg",
+      "status": "failed",
+      "prediction_id": null,
+      "error": "429"
+    },
+    {
+      "slug": "3d-c3-aircross",
+      "prompt": "hunyuan-3d-3.1 from C3 Aircross packshot",
+      "path": "c:/Users/Zakaria/ecomCitroen/ecomCitroen/apps/store-citroen-ma/public/generated/3d/c3-aircross.glb",
+      "status": "failed",
+      "prediction_id": "998ym6aj51rmw0cxk009b73q34",
+      "error": "Unsupported image format: . Supported formats: .jpeg, .jpg, .png, .webp"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+ref c3=https://api.replicate.com/v1/files/OGU1ZDgxZGYtY2Y2My00Mjg0LWI4ZjQtNzc1OTg5MDIxYjNm
+ref c5=https://api.replicate.com/v1/files/MzBjOWI5ZDctNDU0Yy00YzkyLTg3MTYtMmMzZmFmNDQ3YTkx
+ref berlingo=https://api.replicate.com/v1/files/NzgyOWY4NTMtYWUxMS00ZmQ0LTllMzEtNjNiYjIyODYyNzk2
+==== edit jobs done ====
+scripts/gen_with_refs.sh: line 117: /c/Program Files/nodejs/node: Argument list too long
+==== all done ====

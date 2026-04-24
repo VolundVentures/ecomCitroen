@@ -1,0 +1,2 @@
+[22:27:33] iter=1 status=failed
+FAILED: Unsupported image format: . Supported formats: .jpeg, .jpg, .png, .webp
