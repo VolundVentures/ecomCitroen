@@ -123,15 +123,26 @@ function MessageBubble({ m }: { m: Message }) {
     );
   }
   // text
+  if (m.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[78%]">
+          <div className="mb-1 text-end text-[9px] font-medium uppercase tracking-[0.2em] text-emerald-300/70">
+            User
+          </div>
+          <div className="rounded-2xl rounded-tr-md bg-emerald-500/15 px-3.5 py-2.5 text-[12px] text-white/95 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.18)]">
+            {m.content}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className={m.role === "user" ? "flex justify-end" : ""}>
-      <div
-        className={
-          m.role === "user"
-            ? "max-w-[75%] rounded-2xl rounded-tr-md bg-white px-3.5 py-2.5 text-[12px] text-[#0c0c10]"
-            : "max-w-[75%] rounded-2xl rounded-tl-md bg-white/10 px-3.5 py-2.5 text-[12px] text-white/90"
-        }
-      >
+    <div>
+      <div className="mb-1 text-[9px] font-medium uppercase tracking-[0.2em] text-white/35">
+        Rihla
+      </div>
+      <div className="max-w-[78%] rounded-2xl rounded-tl-md bg-white/[0.06] px-3.5 py-2.5 text-[12px] text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
         {m.content}
       </div>
     </div>

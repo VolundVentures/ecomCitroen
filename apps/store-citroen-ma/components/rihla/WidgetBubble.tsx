@@ -497,6 +497,16 @@ function BubblePanel(p: PanelProps) {
         duration={p.callDuration}
         accent={p.accent}
         brandName={p.brand.name}
+        locale={p.voiceLang}
+        onSendText={(t) => {
+          // Send to Gemini Live so Rihla hears it, AND surface it in the
+          // session's transcript bus so it persists as a user_text message.
+          p.live.sendText(t);
+          // The hook's transcript callback handles user-side rendering for
+          // chat mode; for voice we explicitly fire the same event so the
+          // detail page transcript shows the typed turn.
+          p.live.notifyUserText?.(t);
+        }}
       />
     );
   }

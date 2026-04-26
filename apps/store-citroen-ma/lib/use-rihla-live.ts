@@ -160,9 +160,12 @@ export function useRihlaLive(
   const disconnectRef = useRef<(() => void) | null>(null);
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
-  // Voice persistence — server-issued conversation id, plus a buffer for the
-  // currently-streaming assistant turn so we POST it once when the turn ends.
+  // Voice persistence — server-issued conversation id, plus rolling buffers
+  // for the currently-streaming user and assistant turns. Both are flushed on
+  // each model turnComplete so persistence doesn't depend on Gemini setting
+  // a `finished` flag (which it doesn't always set).
   const conversationIdRef = useRef<string | null>(null);
+  const userBufferRef = useRef<string>("");
   const assistantBufferRef = useRef<string>("");
 
   const persistEvent = useCallback(async (payload: Record<string, unknown>) => {
@@ -314,15 +317,14 @@ export function useRihlaLive(
       if ("serverContent" in msg && msg.serverContent) {
         const sc = msg.serverContent;
 
-        // User speech transcript (when inputAudioTranscription is enabled in setup).
+        // User speech transcript chunks (inputAudioTranscription must be
+        // enabled in the setup payload). Buffer until turnComplete.
         if (sc.inputTranscription?.text) {
           const t = sc.inputTranscription.text;
+          userBufferRef.current += t;
           callbacksRef.current.onTranscript?.(t, true);
-          if (sc.inputTranscription.finished) {
-            void persistEvent({ kind: "user_text", text: t });
-          }
         }
-        // Model speech transcript.
+        // Model speech transcript chunks.
         if (sc.outputTranscription?.text) {
           const t = sc.outputTranscription.text;
           assistantBufferRef.current += t;
@@ -340,7 +342,12 @@ export function useRihlaLive(
           }
         }
         if (sc?.turnComplete) {
-          // Flush the assistant buffer once per completed turn.
+          // Flush BOTH buffers once per completed model turn. Persisting user
+          // text first preserves chronological order in the transcript view.
+          if (userBufferRef.current.trim()) {
+            void persistEvent({ kind: "user_text", text: userBufferRef.current.trim() });
+            userBufferRef.current = "";
+          }
           if (assistantBufferRef.current) {
             void persistEvent({ kind: "assistant_text", text: assistantBufferRef.current });
             assistantBufferRef.current = "";
@@ -528,18 +535,33 @@ export function useRihlaLive(
     isPlayingRef.current = false;
     shouldDisconnectRef.current = false;
     assistantBufferRef.current = "";
+    userBufferRef.current = "";
     conversationIdRef.current = null;
     updateState("idle");
   }, [persistEvent, stopMic, updateState]);
 
   disconnectRef.current = disconnect;
 
-  // Send text through the live session (uses realtimeInput which works, unlike clientContent)
+  // Send text through the live session (uses realtimeInput which works, unlike clientContent).
+  // For voice, we also persist the typed text immediately as a user message so
+  // it appears in the conversation transcript even though Gemini's input
+  // transcription only covers audio.
   const sendText = useCallback((text: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ realtimeInput: { text } }));
     }
   }, []);
+
+  /** Forward a typed-by-user line to listeners + persistence. Used by the
+   *  CallView keyboard so the typed turn appears in the transcript. */
+  const notifyUserText = useCallback((text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    callbacksRef.current.onTranscript?.(t, true);
+    if (conversationIdRef.current) {
+      void persistEvent({ kind: "user_text", text: t });
+    }
+  }, [persistEvent]);
 
   useEffect(() => {
     return () => {
@@ -547,5 +569,12 @@ export function useRihlaLive(
     };
   }, [disconnect]);
 
-  return { state, connect, disconnect, sendText, isConnected: state !== "idle" && state !== "error" };
+  return {
+    state,
+    connect,
+    disconnect,
+    sendText,
+    notifyUserText,
+    isConnected: state !== "idle" && state !== "error",
+  };
 }

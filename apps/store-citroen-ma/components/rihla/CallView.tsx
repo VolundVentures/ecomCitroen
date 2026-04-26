@@ -1,8 +1,9 @@
 "use client";
 
+import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { PhoneOff, Mic, MicOff } from "lucide-react";
+import { PhoneOff, Mic, MicOff, Keyboard, SendHorizonal, X } from "lucide-react";
 import type { LiveState } from "@/lib/use-rihla-live";
 
 type CallViewProps = {
@@ -11,21 +12,63 @@ type CallViewProps = {
   duration: number;
   accent?: string;
   brandName?: string;
+  /** When provided, exposes a "type" affordance the user can tap to send text mid-call. */
+  onSendText?: (text: string) => void;
+  /** Locale for the typing affordance label. */
+  locale?: "fr" | "ar" | "en" | "darija" | null;
 };
 
-export function CallView({ state, onHangUp, duration, accent = "#60a5fa", brandName = "Rihla" }: CallViewProps) {
+const TYPE_LABELS: Record<NonNullable<CallViewProps["locale"]>, { tap: string; placeholder: string; sent: string }> = {
+  fr: { tap: "Écrire", placeholder: "Tapez votre nom, numéro…", sent: "Envoyé" },
+  darija: { tap: "كتب", placeholder: "كتب الاسم، الرقم…", sent: "تم الإرسال" },
+  ar: { tap: "اكتب", placeholder: "اكتب الاسم، الرقم…", sent: "تم الإرسال" },
+  en: { tap: "Type", placeholder: "Type your name, number…", sent: "Sent" },
+};
+
+export function CallView({
+  state,
+  onHangUp,
+  duration,
+  accent = "#60a5fa",
+  brandName = "Rihla",
+  onSendText,
+  locale,
+}: CallViewProps) {
   const minutes = Math.floor(duration / 60);
   const seconds = duration % 60;
   const timeStr = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
   const isActive = state === "listening" || state === "speaking" || state === "connected";
   const statusLabel =
-    state === "speaking" ? "Rihla parle…"
-    : state === "listening" ? "À vous…"
-    : state === "connecting" ? "Connexion…"
-    : "En appel";
+    state === "speaking"
+      ? "Rihla parle…"
+      : state === "listening"
+      ? "À vous…"
+      : state === "connecting"
+      ? "Connexion…"
+      : "En appel";
 
   const dotColor = state === "listening" ? "#22c55e" : state === "speaking" ? accent : "#a3e635";
+
+  const [typing, setTyping] = useState(false);
+  const [text, setText] = useState("");
+  const [sentFlash, setSentFlash] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const labels = TYPE_LABELS[locale ?? "fr"];
+  const isRtl = locale === "ar" || locale === "darija";
+
+  useEffect(() => {
+    if (typing) inputRef.current?.focus();
+  }, [typing]);
+
+  const send = useCallback(() => {
+    const t = text.trim();
+    if (!t || !onSendText) return;
+    onSendText(t);
+    setText("");
+    setSentFlash(true);
+    setTimeout(() => setSentFlash(false), 1100);
+  }, [text, onSendText]);
 
   return (
     <div
@@ -33,14 +76,13 @@ export function CallView({ state, onHangUp, duration, accent = "#60a5fa", brandN
       style={{
         background: `radial-gradient(120% 80% at 50% 0%, ${accent}22 0%, #0e0e10 60%, #0a0a0c 100%)`,
       }}
+      dir={isRtl ? "rtl" : "ltr"}
     >
-      {/* Subtle grain */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-[0.06] mix-blend-overlay"
         style={{
-          backgroundImage:
-            "radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px)",
           backgroundSize: "3px 3px",
         }}
       />
@@ -59,16 +101,14 @@ export function CallView({ state, onHangUp, duration, accent = "#60a5fa", brandN
         <div className="mt-2 font-mono text-base tabular-nums text-white/55">{timeStr}</div>
       </div>
 
-      {/* Center: avatar with audio visualization */}
+      {/* Center: avatar */}
       <div className="relative">
-        {/* Halo blob */}
         <div
           aria-hidden
           className="absolute -inset-12 rounded-full blur-3xl"
           style={{ background: `${accent}30` }}
         />
 
-        {/* Animated rings */}
         <AnimatePresence>
           {state === "speaking" && (
             <>
@@ -99,7 +139,6 @@ export function CallView({ state, onHangUp, duration, accent = "#60a5fa", brandN
           )}
         </AnimatePresence>
 
-        {/* Avatar */}
         <motion.div
           className="relative h-44 w-44 overflow-hidden rounded-full ring-4 ring-white/10"
           style={{
@@ -135,13 +174,11 @@ export function CallView({ state, onHangUp, duration, accent = "#60a5fa", brandN
           />
         </motion.div>
 
-        {/* Name */}
         <div className="mt-6 text-center">
           <div className="text-xl font-semibold tracking-tight text-white">Rihla</div>
           <div className="mt-0.5 text-[12px] text-white/45">Conseillère · {brandName}</div>
         </div>
 
-        {/* Equalizer bars (speaking only) */}
         <AnimatePresence>
           {state === "speaking" && (
             <motion.div
@@ -165,26 +202,113 @@ export function CallView({ state, onHangUp, duration, accent = "#60a5fa", brandN
       </div>
 
       {/* Bottom: controls */}
-      <div className="relative flex items-center gap-8">
-        <div
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white/75"
-          title={state === "listening" ? "Micro actif" : "Micro en pause"}
-        >
-          {state === "listening" ? <Mic size={18} /> : <MicOff size={18} />}
+      <div className="relative flex flex-col items-center gap-3">
+        {/* Inline text input — slides in when the user taps "Type" */}
+        <AnimatePresence>
+          {typing && onSendText && (
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.96 }}
+              transition={{ duration: 0.22, ease: [0.22, 0.68, 0, 1] }}
+              className="mb-1 flex w-[min(360px,calc(100vw-48px))] items-center gap-2 rounded-2xl border border-white/15 bg-white/[0.07] p-1.5 backdrop-blur-xl"
+              style={{ boxShadow: `0 12px 32px -8px ${accent}55` }}
+            >
+              <input
+                ref={inputRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); send(); }
+                  if (e.key === "Escape") { setTyping(false); setText(""); }
+                }}
+                placeholder={labels.placeholder}
+                className="flex-1 bg-transparent px-3 py-2 text-[13.5px] text-white outline-none placeholder:text-white/35"
+              />
+              <motion.button
+                type="button"
+                onClick={send}
+                disabled={!text.trim()}
+                whileTap={{ scale: 0.92 }}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-white transition disabled:opacity-30"
+                style={{ background: accent }}
+                aria-label="Send"
+              >
+                <SendHorizonal size={15} strokeWidth={2} />
+              </motion.button>
+              <button
+                type="button"
+                onClick={() => { setTyping(false); setText(""); }}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-white/55 transition hover:bg-white/[0.08] hover:text-white"
+                aria-label="Close keyboard"
+              >
+                <X size={14} strokeWidth={2} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {sentFlash && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="text-[10.5px] uppercase tracking-[0.18em] text-emerald-300/85"
+            >
+              {labels.sent}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex items-center gap-7">
+          <button
+            type="button"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white/75"
+            title={state === "listening" ? "Mic on" : "Mic muted"}
+            aria-label="Microphone"
+          >
+            {state === "listening" ? <Mic size={18} /> : <MicOff size={18} />}
+          </button>
+
+          <motion.button
+            type="button"
+            onClick={onHangUp}
+            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.06 }}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_42px_-6px_rgba(239,68,68,0.65)] transition hover:bg-red-600"
+            aria-label="Hang up"
+          >
+            <PhoneOff size={22} />
+          </motion.button>
+
+          {onSendText ? (
+            <motion.button
+              type="button"
+              onClick={() => setTyping((v) => !v)}
+              whileTap={{ scale: 0.92 }}
+              className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
+                typing ? "bg-white text-[#0c0c10]" : "bg-white/10 text-white/75 hover:bg-white/15 hover:text-white"
+              }`}
+              aria-label={labels.tap}
+              title={labels.tap}
+            >
+              <Keyboard size={18} />
+            </motion.button>
+          ) : (
+            <div className="h-12 w-12" />
+          )}
         </div>
 
-        <motion.button
-          type="button"
-          onClick={onHangUp}
-          whileTap={{ scale: 0.9 }}
-          whileHover={{ scale: 1.06 }}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_42px_-6px_rgba(239,68,68,0.65)] transition hover:bg-red-600"
-          aria-label="Hang up"
-        >
-          <PhoneOff size={22} />
-        </motion.button>
-
-        <div className="h-12 w-12" />
+        {onSendText && !typing && (
+          <button
+            type="button"
+            onClick={() => setTyping(true)}
+            className="text-[11px] uppercase tracking-[0.2em] text-white/40 transition hover:text-white/70"
+          >
+            {labels.tap} ↑
+          </button>
+        )}
       </div>
     </div>
   );
