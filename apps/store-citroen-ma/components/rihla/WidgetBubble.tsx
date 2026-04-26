@@ -1,13 +1,15 @@
 "use client";
 
-// Brand-aware widget chat bubble for /w/[brand] and /demo/[brand]. Slim version
-// of RihlaBubble — no next-intl, no router push (tools open brand-site URLs in
-// new tabs), supports image cards inline.
+// Brand-aware floating widget. Flow:
+//   closed → language picker → mode picker (chat | voice) → chat or call
+//
+// Designed for an exec-tier demo: bigger Rihla avatar FAB with a greeting
+// bubble teaser, polished microinteractions throughout.
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { SendHorizonal, X, PhoneCall, Sparkles, Globe, ExternalLink } from "lucide-react";
+import { SendHorizonal, X, PhoneCall, ArrowLeft, ExternalLink, Sparkles } from "lucide-react";
 import {
   dispatchRihlaTool,
   onEndCall,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/rihla-actions";
 import { useRihlaLive, type LiveToolCall } from "@/lib/use-rihla-live";
 import { LanguagePicker, getLangConfig, type VoiceLang } from "@/components/rihla/LanguagePicker";
+import { ModePicker, type Mode } from "@/components/rihla/ModePicker";
 import { CallView } from "@/components/rihla/CallView";
 
 type Msg =
@@ -35,40 +38,71 @@ type Props = {
     logoUrl: string | null;
     primaryColor: string | null;
   };
-  /** Available locales for this brand. */
   availableLangs: VoiceLang[];
   /** When true, the panel is full-bleed inside its container (no FAB, no close). */
   embedded?: boolean;
 };
 
+type Stage = "lang" | "mode" | "chat";
+
+const STORAGE_KEY = (slug: string) => `widget-state-${slug}`;
+
+function readStored(slug: string): { lang: VoiceLang | null; mode: Mode | null } {
+  if (typeof window === "undefined") return { lang: null, mode: null };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY(slug));
+    if (!raw) return { lang: null, mode: null };
+    const parsed = JSON.parse(raw) as { lang?: VoiceLang; mode?: Mode };
+    return { lang: parsed.lang ?? null, mode: parsed.mode ?? null };
+  } catch {
+    return { lang: null, mode: null };
+  }
+}
+
+function writeStored(slug: string, lang: VoiceLang | null, mode: Mode | null) {
+  if (typeof window === "undefined") return;
+  if (!lang && !mode) localStorage.removeItem(STORAGE_KEY(slug));
+  else localStorage.setItem(STORAGE_KEY(slug), JSON.stringify({ lang, mode }));
+}
+
 export function WidgetBubble({ brand, availableLangs, embedded = false }: Props) {
   const [open, setOpen] = useState(embedded);
+  const [showTeaser, setShowTeaser] = useState(false);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [voiceLang, setVoiceLang] = useState<VoiceLang | null>(() => {
-    if (typeof window === "undefined") return null;
-    return (localStorage.getItem(`widget-lang-${brand.slug}`) as VoiceLang) ?? null;
-  });
+  const initial = readStored(brand.slug);
+  const [voiceLang, setVoiceLang] = useState<VoiceLang | null>(initial.lang);
+  const [mode, setMode] = useState<Mode | null>(initial.mode);
+
+  const stage: Stage = !voiceLang ? "lang" : !mode ? "mode" : "chat";
   const langConfig = voiceLang ? getLangConfig(voiceLang) : null;
   const apiLocale = voiceLang === "darija" ? "ar" : voiceLang ?? "fr";
 
-  const [messages, setMessages] = useState<Msg[]>(() =>
-    voiceLang
-      ? [{ kind: "text", role: "assistant", text: getLangConfig(voiceLang).greeting }]
-      : []
-  );
+  const [messages, setMessages] = useState<Msg[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef(messages);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
-  // Persistence: sticky conversation id across turns. Server creates on first
-  // turn, returns it via { type: "conversation", id }, client echoes it back.
   const conversationIdRef = useRef<string | null>(null);
 
-  // Render image cards as messages when the agent calls show_model_image.
+  // Inject the assistant greeting on chat stage entry (or after mode pick).
+  useEffect(() => {
+    if (stage === "chat" && voiceLang && messages.length === 0 && mode === "chat") {
+      setMessages([{ kind: "text", role: "assistant", text: getLangConfig(voiceLang).greeting }]);
+    }
+  }, [stage, voiceLang, mode, messages.length]);
+
+  // Show greeting teaser briefly when widget loads closed.
+  useEffect(() => {
+    if (embedded || open) return;
+    const t = setTimeout(() => setShowTeaser(true), 1200);
+    const t2 = setTimeout(() => setShowTeaser(false), 8000);
+    return () => { clearTimeout(t); clearTimeout(t2); };
+  }, [embedded, open]);
+
   useEffect(() => {
     return onImageCard((payload) => {
       setMessages((m) => [...m, { kind: "image_card", role: "assistant", payload }]);
@@ -78,11 +112,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   const handleLiveToolCall = useCallback((call: LiveToolCall): string => {
     return dispatchRihlaTool(
       { name: call.name, input: call.args },
-      {
-        locale: apiLocale,
-        router: { push: () => {} },
-        brand,
-      }
+      { locale: apiLocale, router: { push: () => {} }, brand }
     );
   }, [apiLocale, brand]);
 
@@ -110,6 +140,15 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     brand.slug
   );
 
+  // Auto-start the call once the user picks "voice" mode.
+  useEffect(() => {
+    if (stage === "chat" && mode === "voice" && !live.isConnected && live.state === "idle") {
+      setMessages([]);
+      live.connect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, mode]);
+
   // Call duration timer.
   useEffect(() => {
     if (live.isConnected) {
@@ -122,33 +161,49 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
   }, [live.isConnected]);
 
-  // end_call from text chat → close panel after delay.
+  // end_call handling — for voice mode, drop back to mode picker; for chat, close panel.
   useEffect(() => {
     return onEndCall(() => {
       if (live.isConnected) return;
-      if (!embedded) setTimeout(() => setOpen(false), 2500);
+      if (mode === "voice") {
+        setMode(null);
+        writeStored(brand.slug, voiceLang, null);
+        return;
+      }
+      if (!embedded) setTimeout(() => setOpen(false), 2000);
     });
-  }, [live.isConnected, embedded]);
+  }, [live.isConnected, embedded, mode, brand.slug, voiceLang]);
 
-  // Auto-scroll on new messages.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const startCall = useCallback(() => {
-    if (!live.isConnected) {
-      setMessages((m) => [...m, { kind: "text", role: "assistant", text: "" }]);
-      live.connect();
-    }
-  }, [live]);
-
-  const endCall = useCallback(() => { live.disconnect(); }, [live]);
-
   const handleLangSelect = useCallback((lang: VoiceLang) => {
     setVoiceLang(lang);
-    localStorage.setItem(`widget-lang-${brand.slug}`, lang);
-    setMessages([{ kind: "text", role: "assistant", text: getLangConfig(lang).greeting }]);
+    writeStored(brand.slug, lang, null);
+    setMessages([]);
   }, [brand.slug]);
+
+  const handleModeSelect = useCallback((m: Mode) => {
+    setMode(m);
+    writeStored(brand.slug, voiceLang, m);
+    setMessages([]);
+  }, [brand.slug, voiceLang]);
+
+  const resetToLang = useCallback(() => {
+    if (live.isConnected) live.disconnect();
+    setVoiceLang(null);
+    setMode(null);
+    setMessages([]);
+    writeStored(brand.slug, null, null);
+  }, [brand.slug, live]);
+
+  const resetToMode = useCallback(() => {
+    if (live.isConnected) live.disconnect();
+    setMode(null);
+    setMessages([]);
+    writeStored(brand.slug, voiceLang, null);
+  }, [brand.slug, voiceLang, live]);
 
   const sendTextMessage = useCallback(async (text: string) => {
     const current = messagesRef.current;
@@ -168,7 +223,6 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     abortRef.current = controller;
 
     try {
-      // Build the API messages list — only text turns; image_card aren't part of LLM context.
       const apiMessages = next
         .slice(0, -1)
         .filter((m): m is Extract<Msg, { kind: "text" }> => m.kind === "text")
@@ -258,67 +312,119 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     void sendTextMessage(text);
   }, [input, isStreaming, sendTextMessage]);
 
-  const accent = brand.primaryColor ?? "#121214";
+  const accent = brand.primaryColor ?? "#0c0c10";
 
-  // ─── Render ─────────────────────────────────────────────────────────────
+  // ─── Inner panel content ──────────────────────────────────────────────────
 
-  // Embedded mode renders the panel inline (no FAB, no close button).
+  const panel = (
+    <BubblePanel
+      brand={brand}
+      availableLangs={availableLangs}
+      stage={stage}
+      mode={mode}
+      voiceLang={voiceLang}
+      langConfig={langConfig}
+      live={live}
+      callDuration={callDuration}
+      messages={messages}
+      isStreaming={isStreaming}
+      input={input}
+      setInput={setInput}
+      handleSend={handleSend}
+      handleLangSelect={handleLangSelect}
+      handleModeSelect={handleModeSelect}
+      resetToLang={resetToLang}
+      resetToMode={resetToMode}
+      scrollRef={scrollRef}
+      accent={accent}
+      onClose={embedded ? null : () => setOpen(false)}
+    />
+  );
+
   if (embedded) {
-    return (
-      <div className="relative flex h-full w-full flex-col overflow-hidden bg-white">
-        <BubbleContent
-          brand={brand}
-          availableLangs={availableLangs}
-          voiceLang={voiceLang}
-          langConfig={langConfig}
-          live={live}
-          callDuration={callDuration}
-          endCall={endCall}
-          startCall={startCall}
-          messages={messages}
-          isStreaming={isStreaming}
-          input={input}
-          setInput={setInput}
-          handleSend={handleSend}
-          handleLangSelect={handleLangSelect}
-          scrollRef={scrollRef}
-          accent={accent}
-          onClose={null}
-          onLangReset={() => { setVoiceLang(null); localStorage.removeItem(`widget-lang-${brand.slug}`); }}
-        />
-      </div>
-    );
+    return <div className="relative h-full w-full overflow-hidden bg-white">{panel}</div>;
   }
 
-  // Floating mode (used in /demo/[brand]) — FAB + slide-up panel.
   return (
     <>
       <AnimatePresence>
         {!open && (
-          <motion.button
-            key="fab"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            type="button"
-            onClick={() => setOpen(true)}
-            whileTap={{ scale: 0.92 }}
-            whileHover={{ scale: 1.05 }}
-            className="fixed bottom-5 end-5 z-[60] overflow-hidden rounded-full shadow-[0_8px_36px_-6px_rgba(0,0,0,0.35)]"
-            style={{ background: accent }}
-            aria-label="Open chat"
+          <motion.div
+            key="fab-wrap"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={{ type: "spring", stiffness: 280, damping: 22 }}
+            className="fixed bottom-5 end-5 z-[60] flex items-end gap-3"
           >
-            <div className="relative h-14 w-14">
-              {brand.logoUrl ? (
-                <Image src={brand.logoUrl} alt={brand.name} fill className="object-cover p-2" sizes="56px" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <Sparkles size={20} color="white" />
-                </div>
+            {/* Greeting teaser — slides in from the side. */}
+            <AnimatePresence>
+              {showTeaser && (
+                <motion.button
+                  key="teaser"
+                  type="button"
+                  onClick={() => { setShowTeaser(false); setOpen(true); }}
+                  initial={{ opacity: 0, x: 24, scale: 0.92 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 12, scale: 0.95 }}
+                  transition={{ duration: 0.35, ease: [0.22, 0.68, 0, 1] }}
+                  className="mb-2 hidden items-center gap-2 rounded-2xl bg-white px-4 py-3 text-start text-[12px] leading-snug text-[#0c0c10] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.25),0_0_0_1px_rgba(0,0,0,0.05)] sm:flex"
+                >
+                  <Sparkles size={12} strokeWidth={2} style={{ color: accent }} />
+                  <span>Bonjour ! Besoin d'aide pour choisir votre {brand.name.split(" ")[0]} ?</span>
+                  <X
+                    size={12}
+                    strokeWidth={2}
+                    className="ms-2 text-black/30 hover:text-black/60"
+                    onClick={(e) => { e.stopPropagation(); setShowTeaser(false); }}
+                  />
+                </motion.button>
               )}
-              <div className="absolute -end-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400" />
-            </div>
-          </motion.button>
+            </AnimatePresence>
+
+            {/* The big FAB with Rihla avatar */}
+            <motion.button
+              key="fab"
+              type="button"
+              onClick={() => setOpen(true)}
+              whileTap={{ scale: 0.93 }}
+              whileHover={{ scale: 1.06 }}
+              className="relative h-[72px] w-[72px] overflow-visible rounded-full focus:outline-none focus:ring-4 focus:ring-white/40"
+              aria-label="Open Rihla"
+            >
+              {/* Pulse rings */}
+              <motion.span
+                aria-hidden
+                className="absolute inset-0 rounded-full"
+                style={{ background: accent, opacity: 0.18 }}
+                animate={{ scale: [1, 1.55, 1], opacity: [0.18, 0, 0.18] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut" }}
+              />
+              <motion.span
+                aria-hidden
+                className="absolute inset-0 rounded-full"
+                style={{ background: accent, opacity: 0.14 }}
+                animate={{ scale: [1, 1.85, 1], opacity: [0.14, 0, 0.14] }}
+                transition={{ duration: 2.4, delay: 0.6, repeat: Infinity, ease: "easeOut" }}
+              />
+              {/* Avatar */}
+              <span
+                className="relative block h-full w-full overflow-hidden rounded-full ring-[3px] ring-white shadow-[0_14px_36px_-8px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,0,0,0.04)]"
+                style={{ background: accent }}
+              >
+                <Image
+                  src="/brand/rihla-avatar.jpg"
+                  alt="Rihla"
+                  fill
+                  priority
+                  sizes="72px"
+                  className="object-cover"
+                />
+              </span>
+              {/* Online dot */}
+              <span className="absolute bottom-1.5 end-1.5 inline-block h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400 shadow-[0_2px_6px_rgba(16,185,129,0.45)]" />
+            </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -326,34 +432,15 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
         {open && (
           <motion.div
             key="panel"
-            initial={{ opacity: 0, y: 20, scale: 0.96 }}
+            initial={{ opacity: 0, y: 28, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.96 }}
-            transition={{ duration: 0.25, ease: [0.22, 0.68, 0, 1] }}
+            exit={{ opacity: 0, y: 28, scale: 0.97 }}
+            transition={{ duration: 0.28, ease: [0.22, 0.68, 0, 1] }}
             role="dialog"
             aria-label={brand.name}
-            className="fixed inset-x-3 bottom-3 z-[60] flex h-[min(720px,calc(100dvh-24px))] flex-col overflow-hidden rounded-[24px] bg-white shadow-[0_24px_80px_-16px_rgba(0,0,0,0.3),0_0_0_1px_rgba(0,0,0,0.06)] sm:inset-x-auto sm:bottom-5 sm:end-4 sm:h-[min(720px,calc(100dvh-40px))] sm:w-[min(420px,calc(100vw-32px))]"
+            className="fixed inset-x-3 bottom-3 z-[60] flex h-[min(720px,calc(100dvh-24px))] flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_28px_84px_-16px_rgba(0,0,0,0.32),0_0_0_1px_rgba(0,0,0,0.06)] sm:inset-x-auto sm:bottom-5 sm:end-5 sm:h-[min(720px,calc(100dvh-40px))] sm:w-[min(420px,calc(100vw-32px))]"
           >
-            <BubbleContent
-              brand={brand}
-              availableLangs={availableLangs}
-              voiceLang={voiceLang}
-              langConfig={langConfig}
-              live={live}
-              callDuration={callDuration}
-              endCall={endCall}
-              startCall={startCall}
-              messages={messages}
-              isStreaming={isStreaming}
-              input={input}
-              setInput={setInput}
-              handleSend={handleSend}
-              handleLangSelect={handleLangSelect}
-              scrollRef={scrollRef}
-              accent={accent}
-              onClose={() => setOpen(false)}
-              onLangReset={() => { setVoiceLang(null); localStorage.removeItem(`widget-lang-${brand.slug}`); }}
-            />
+            {panel}
           </motion.div>
         )}
       </AnimatePresence>
@@ -361,177 +448,325 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   );
 }
 
-// ─── Inner content (header + body + input) ────────────────────────────────────
+// ─── Inner panel content ────────────────────────────────────────────────────
 
-type ContentProps = {
+type PanelProps = {
   brand: Props["brand"];
   availableLangs: VoiceLang[];
+  stage: Stage;
+  mode: Mode | null;
   voiceLang: VoiceLang | null;
   langConfig: ReturnType<typeof getLangConfig> | null;
   live: ReturnType<typeof useRihlaLive>;
   callDuration: number;
-  endCall: () => void;
-  startCall: () => void;
   messages: Msg[];
   isStreaming: boolean;
   input: string;
   setInput: (v: string) => void;
   handleSend: () => void;
   handleLangSelect: (l: VoiceLang) => void;
+  handleModeSelect: (m: Mode) => void;
+  resetToLang: () => void;
+  resetToMode: () => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   accent: string;
   onClose: (() => void) | null;
-  onLangReset: () => void;
 };
 
-function BubbleContent(p: ContentProps) {
-  if (p.live.isConnected) {
-    return <CallView state={p.live.state} onHangUp={p.endCall} duration={p.callDuration} />;
+function BubblePanel(p: PanelProps) {
+  // Voice mode / call view takes over completely.
+  if (p.live.isConnected || (p.stage === "chat" && p.mode === "voice")) {
+    return (
+      <CallView
+        state={p.live.state}
+        onHangUp={() => { p.live.disconnect(); p.resetToMode(); }}
+        duration={p.callDuration}
+        accent={p.accent}
+        brandName={p.brand.name}
+      />
+    );
   }
   return (
     <>
-      <header
-        className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3"
-        style={{ background: p.accent, color: "white" }}
-      >
-        {p.brand.logoUrl && (
-          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-white/10 p-1">
-            <Image src={p.brand.logoUrl} alt={p.brand.name} fill className="object-contain p-1" sizes="36px" />
-          </div>
+      <Header
+        brand={p.brand}
+        accent={p.accent}
+        stage={p.stage}
+        voiceLang={p.voiceLang}
+        langConfig={p.langConfig}
+        onClose={p.onClose}
+        onChangeLang={p.resetToLang}
+        onBack={p.stage === "chat" ? p.resetToMode : p.stage === "mode" ? p.resetToLang : null}
+      />
+
+      <AnimatePresence mode="wait">
+        {p.stage === "lang" && (
+          <motion.div key="lang" className="flex-1 overflow-hidden">
+            <LanguagePicker onSelect={p.handleLangSelect} available={p.availableLangs} accent={p.accent} />
+          </motion.div>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold">{p.brand.name}</div>
-          <div className="flex items-center gap-1.5 text-[11px] opacity-80">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            En ligne
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {p.voiceLang && (
-            <button
-              type="button"
-              onClick={p.onLangReset}
-              className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] text-white/80 transition hover:bg-white/20"
-            >
-              <Globe size={10} /> {p.langConfig?.flag}
-            </button>
-          )}
-          {p.onClose && (
-            <button type="button" onClick={p.onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
-              <X size={15} />
-            </button>
-          )}
-        </div>
-      </header>
 
-      {!p.voiceLang ? (
-        <div className="flex-1 bg-[#fafafa]">
-          <LanguagePicker onSelect={p.handleLangSelect} />
-        </div>
-      ) : (
-        <>
-          <div ref={p.scrollRef} className="flex-1 overflow-y-auto bg-[#fafafa] px-4 py-4">
-            <div className="space-y-4">
-              {p.messages.map((m, i) =>
-                m.kind === "image_card" ? (
-                  <ImageCardMsg key={i} payload={m.payload} />
-                ) : (
-                  <TextMsg key={i} m={m} streaming={p.isStreaming && i === p.messages.length - 1} />
-                )
-              )}
-            </div>
-          </div>
+        {p.stage === "mode" && p.voiceLang && (
+          <motion.div key="mode" className="flex-1 overflow-hidden">
+            <ModePicker lang={p.voiceLang} accent={p.accent} onSelect={p.handleModeSelect} onBack={p.resetToLang} />
+          </motion.div>
+        )}
 
-          <div className="border-t border-black/[0.06] bg-white px-3 pb-3 pt-2">
-            <div className="flex items-end gap-1.5 rounded-2xl border border-black/[0.08] bg-[#fafafa] p-1.5">
-              <button
-                type="button"
-                onClick={p.startCall}
-                className="mb-px flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white transition hover:bg-emerald-600"
-                title="Appeler"
-              >
-                <PhoneCall size={14} />
-              </button>
-              <textarea
-                value={p.input}
-                onChange={(e) => p.setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); p.handleSend(); } }}
-                placeholder={p.langConfig?.label ? `Message en ${p.langConfig.label}…` : "Écrivez ici…"}
-                rows={1}
-                disabled={p.isStreaming}
-                className="block max-h-[96px] min-h-[32px] flex-1 resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[13px] leading-snug text-[#121214] outline-none placeholder:text-black/30 disabled:opacity-40"
-                style={{ fieldSizing: "content" } as React.CSSProperties}
-              />
-              <button
-                type="button"
-                onClick={p.handleSend}
-                disabled={p.isStreaming || !p.input.trim()}
-                className="mb-px flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white transition disabled:opacity-20"
-                style={{ background: p.accent }}
-              >
-                <SendHorizonal size={14} strokeWidth={2} />
-              </button>
+        {p.stage === "chat" && (
+          <motion.div key="chat" className="flex flex-1 flex-col overflow-hidden bg-[#fafafa]">
+            <div ref={p.scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="space-y-3">
+                {p.messages.map((m, i) =>
+                  m.kind === "image_card" ? (
+                    <ImageCardMsg key={i} payload={m.payload} accent={p.accent} />
+                  ) : (
+                    <TextMsg
+                      key={i}
+                      m={m}
+                      streaming={p.isStreaming && i === p.messages.length - 1}
+                      accent={p.accent}
+                      brandName={p.brand.name}
+                    />
+                  )
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+
+            <div className="border-t border-black/[0.06] bg-white px-3 pb-3 pt-2.5">
+              <div className="flex items-end gap-1.5 rounded-2xl border border-black/[0.08] bg-[#fafafa] p-1.5 transition focus-within:border-black/20 focus-within:shadow-[0_0_0_4px_rgba(0,0,0,0.04)]">
+                <textarea
+                  value={p.input}
+                  onChange={(e) => p.setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); p.handleSend(); } }}
+                  placeholder={inputPlaceholder(p.voiceLang)}
+                  rows={1}
+                  disabled={p.isStreaming}
+                  className="block max-h-[96px] min-h-[36px] flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2 text-[13px] leading-snug text-[#0c0c10] outline-none placeholder:text-black/30 disabled:opacity-40"
+                  style={{ fieldSizing: "content" } as React.CSSProperties}
+                />
+                <motion.button
+                  type="button"
+                  onClick={p.handleSend}
+                  disabled={p.isStreaming || !p.input.trim()}
+                  whileTap={{ scale: 0.92 }}
+                  className="mb-px flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition disabled:opacity-25"
+                  style={{ background: p.accent }}
+                  aria-label="Send"
+                >
+                  <SendHorizonal size={15} strokeWidth={2} />
+                </motion.button>
+              </div>
+              <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-black/30">
+                <span>Powered by Rihla</span>
+                <button
+                  type="button"
+                  onClick={p.resetToMode}
+                  className="inline-flex items-center gap-1 transition hover:text-black/60"
+                >
+                  <PhoneCall size={10} strokeWidth={2} /> Switch to voice
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
 
-function TextMsg({ m, streaming }: { m: Extract<Msg, { kind: "text" }>; streaming: boolean }) {
+// ─── Pieces ────────────────────────────────────────────────────────────────
+
+function Header({
+  brand,
+  accent,
+  stage,
+  voiceLang,
+  langConfig,
+  onClose,
+  onChangeLang,
+  onBack,
+}: {
+  brand: Props["brand"];
+  accent: string;
+  stage: Stage;
+  voiceLang: VoiceLang | null;
+  langConfig: ReturnType<typeof getLangConfig> | null;
+  onClose: (() => void) | null;
+  onChangeLang: () => void;
+  onBack: (() => void) | null;
+}) {
+  const isChat = stage === "chat";
+  return (
+    <header
+      className="relative flex shrink-0 items-center gap-3 px-4 py-3 text-white"
+      style={{ background: accent }}
+    >
+      {/* Subtle gloss */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 60%)" }}
+      />
+
+      {onBack && stage !== "lang" ? (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20"
+        >
+          <ArrowLeft size={15} strokeWidth={2} />
+        </button>
+      ) : (
+        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 ring-white/30">
+          <Image src="/brand/rihla-avatar.jpg" alt="Rihla" fill sizes="36px" className="object-cover" />
+        </div>
+      )}
+
+      <div className="relative min-w-0 flex-1">
+        <div className="text-[13px] font-semibold leading-tight">{isChat ? "Rihla" : brand.name}</div>
+        <div className="flex items-center gap-1.5 text-[11px] opacity-85">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <span>{isChat ? `Conseillère · ${brand.name}` : "En ligne"}</span>
+        </div>
+      </div>
+
+      <div className="relative flex items-center gap-1.5">
+        {voiceLang && stage !== "lang" && (
+          <button
+            type="button"
+            onClick={onChangeLang}
+            className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-white/85 transition hover:bg-white/20"
+            aria-label="Change language"
+          >
+            <span>{langConfig?.flag}</span>
+            <span>{langConfig?.label}</span>
+          </button>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20"
+          >
+            <X size={15} strokeWidth={2} />
+          </button>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function inputPlaceholder(lang: VoiceLang | null): string {
+  if (lang === "ar") return "اكتب رسالتك هنا…";
+  if (lang === "darija") return "كتب الرسالة ديالك هنا…";
+  if (lang === "en") return "Type your message…";
+  return "Écrivez votre message…";
+}
+
+function TextMsg({
+  m,
+  streaming,
+  accent,
+  brandName,
+}: {
+  m: Extract<Msg, { kind: "text" }>;
+  streaming: boolean;
+  accent: string;
+  brandName: string;
+}) {
   if (m.role === "assistant") {
     return (
-      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-        <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[13px] leading-relaxed text-[#121214] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-          {m.text || (streaming ? <TypingDots /> : "")}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.22, 0.68, 0, 1] }}
+        className="flex items-end gap-2"
+      >
+        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
+          <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
         </div>
-        {m.tools && m.tools.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {m.tools.map((tc, j) => (
-              <span key={j} className="inline-flex items-center gap-0.5 rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[9px] text-black/35">
-                <Sparkles size={8} /> {tc.name.replace(/_/g, " ")}
-              </span>
-            ))}
+        <div className="min-w-0 max-w-[82%]">
+          <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[13px] leading-relaxed text-[#0c0c10] shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_0_1px_rgba(0,0,0,0.04)]">
+            {m.text || (streaming ? <TypingDots /> : "")}
           </div>
-        )}
+          {m.tools && m.tools.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1 ps-1">
+              {m.tools.map((tc, j) => (
+                <span
+                  key={j}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.06em]"
+                  style={{ background: `${accent}10`, color: accent }}
+                >
+                  <Sparkles size={8} strokeWidth={2.2} /> {tc.name.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Use brandName subtly to convey context for the assistant */}
+        <span className="sr-only">{brandName}</span>
       </motion.div>
     );
   }
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex justify-end">
-      <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-[#121214] px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 0.68, 0, 1] }}
+      className="flex justify-end"
+    >
+      <div
+        className="max-w-[82%] rounded-2xl rounded-br-md px-3.5 py-2.5 text-[13px] leading-relaxed text-white shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+        style={{ background: accent }}
+      >
         {m.text}
       </div>
     </motion.div>
   );
 }
 
-function ImageCardMsg({ payload }: { payload: ImageCardPayload }) {
+function ImageCardMsg({ payload, accent }: { payload: ImageCardPayload; accent: string }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-      <div className="max-w-[90%] overflow-hidden rounded-2xl rounded-tl-md bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
+      className="flex items-end gap-2"
+    >
+      <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
+        <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
+      </div>
+      <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.05)]">
         {payload.imageUrl && (
           <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#f4f4f5]">
-            {/* Use plain <img> so we don't need a remotePatterns config for arbitrary CDNs. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={payload.imageUrl} alt={payload.caption ?? ""} className="h-full w-full object-cover" />
+            <img
+              src={payload.imageUrl}
+              alt={payload.caption ?? ""}
+              className="h-full w-full object-cover transition-transform duration-700 hover:scale-[1.03]"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+            {payload.caption && (
+              <div className="absolute inset-x-0 bottom-0 px-3.5 pb-2 pt-6">
+                <div className="text-[12px] font-semibold text-white drop-shadow-sm">{payload.caption}</div>
+              </div>
+            )}
           </div>
         )}
-        <div className="px-3.5 py-2.5">
-          {payload.caption && <div className="text-[13px] font-medium text-[#121214]">{payload.caption}</div>}
-          {payload.ctaUrl && (
-            <a
-              href={payload.ctaUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-blue-600 hover:underline"
-            >
-              {payload.ctaLabel ?? "Voir plus"}
-              <ExternalLink size={11} strokeWidth={2} />
-            </a>
-          )}
-        </div>
+        {payload.ctaUrl && (
+          <a
+            href={payload.ctaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-[12px] font-medium transition hover:bg-black/[0.03]"
+            style={{ color: accent }}
+          >
+            <span>{payload.ctaLabel ?? "Voir plus"}</span>
+            <ExternalLink size={12} strokeWidth={2} />
+          </a>
+        )}
       </div>
     </motion.div>
   );
@@ -539,9 +774,14 @@ function ImageCardMsg({ payload }: { payload: ImageCardPayload }) {
 
 function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-[3px]">
+    <span className="inline-flex items-center gap-[3px] py-0.5">
       {[0, 1, 2].map((i) => (
-        <motion.span key={i} className="inline-block h-[5px] w-[5px] rounded-full bg-black/25" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, delay: i * 0.15, repeat: Infinity }} />
+        <motion.span
+          key={i}
+          className="inline-block h-[5px] w-[5px] rounded-full bg-black/30"
+          animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+          transition={{ duration: 1, delay: i * 0.15, repeat: Infinity }}
+        />
       ))}
     </span>
   );
