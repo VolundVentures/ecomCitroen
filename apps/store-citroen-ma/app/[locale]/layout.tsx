@@ -35,15 +35,13 @@ export default async function LocaleLayout({ children, params }: Props) {
   const dir = locale === "ar" ? "rtl" : "ltr";
 
   return (
-    <html lang={locale} dir={dir}>
-      <body className="min-h-screen bg-[--brand-surface] text-[--brand-ink] antialiased">
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <Header locale={locale} />
-          <main className="pt-16">{children}</main>
-          <Footer />
-          <RihlaBubble />
-        </NextIntlClientProvider>
-      </body>
-    </html>
+    <div lang={locale} dir={dir} className="bg-[--brand-surface] text-[--brand-ink]">
+      <NextIntlClientProvider locale={locale} messages={messages}>
+        <Header locale={locale} />
+        <main className="pt-16">{children}</main>
+        <Footer />
+        <RihlaBubble />
+      </NextIntlClientProvider>
+    </div>
   );
 }
