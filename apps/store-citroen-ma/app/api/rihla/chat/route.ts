@@ -3,6 +3,16 @@ import { GoogleGenAI, Type, type Tool, type Content } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import { RIHLA_MODELS, buildSystemPrompt, type BrandContext } from "@citroen-store/rihla-agent";
 import { getBrandContext, toAgentContext } from "@/lib/brand-context";
+import {
+  createConversation,
+  appendUserMessage,
+  appendAssistantMessage,
+  recordToolCall,
+  updateFunnelCheckpoints,
+  captureLeadFromBooking,
+  closeConversation,
+} from "@/lib/persistence";
+import type { Locale } from "@/lib/supabase/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +21,8 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 type ChatRequest = {
   /** Required for widget mode — the brand whose prompt + catalog to use. */
   brandSlug?: string;
+  /** Conversation id for persistence. If absent, server creates a new one. */
+  conversationId?: string;
   locale?: "fr" | "ar" | "darija" | "en" | "ar-SA" | "en-SA";
   messages: ChatMessage[];
   dealerCityHint?: string;
@@ -468,44 +480,124 @@ export async function POST(req: NextRequest) {
     console.log("[rihla/chat] fast-path:", fastIntent.name, JSON.stringify(fastIntent.input));
   }
 
+  // Lazily create the conversation row on the first turn. We only persist when
+  // we have a brandSlug (widget mode) — legacy storefront calls stay anonymous.
+  let conversationId: string | null = body.conversationId ?? null;
+  if (!conversationId && body.brandSlug) {
+    conversationId = await createConversation({
+      brandSlug: body.brandSlug,
+      locale: locale as Locale,
+      channel: body.voice ? "voice" : "chat",
+      userAgent: req.headers.get("user-agent"),
+    });
+  }
+  // Always persist the user's latest turn before streaming the assistant reply.
+  if (conversationId && lastUserMsg) {
+    await appendUserMessage(conversationId, lastUserMsg.content);
+  }
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // Tell the client which conversation id to send back next turn.
+      if (conversationId) {
+        emit(controller, encoder, { type: "conversation", id: conversationId });
+      }
+
+      const collectedText: string[] = [];
+      const collectedTools: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+      // Wrap the controller so we can also accumulate everything for persistence.
+      const tap = new Proxy(controller, {
+        get(target, prop) {
+          if (prop === "enqueue") {
+            return (chunk: Uint8Array) => {
+              try {
+                const line = new TextDecoder().decode(chunk).trim();
+                if (line.startsWith("{")) {
+                  const ev = JSON.parse(line) as { type: string; text?: string; name?: string; input?: Record<string, unknown> };
+                  if (ev.type === "text" && ev.text) collectedText.push(ev.text);
+                  if (ev.type === "tool" && ev.name) collectedTools.push({ name: ev.name, input: ev.input ?? {} });
+                }
+              } catch { /* not a JSON line; ignore */ }
+              return target.enqueue(chunk);
+            };
+          }
+          // @ts-expect-error proxy passthrough
+          return target[prop];
+        },
+      });
+
       try {
-        // Emit fast-path tool call BEFORE LLM generates text
         if (fastIntent) {
-          emit(controller, encoder, {
-            type: "tool",
-            name: fastIntent.name,
-            input: fastIntent.input,
-          });
+          emit(tap, encoder, { type: "tool", name: fastIntent.name, input: fastIntent.input });
         }
 
         if (provider === "gemini") {
           try {
-            await streamWithGemini(controller, encoder, systemPrompt, body.messages);
+            await streamWithGemini(tap, encoder, systemPrompt, body.messages);
           } catch (geminiErr) {
-            // Gemini failed — fall back to Claude if available
             const fallbackKey = process.env.ANTHROPIC_API_KEY;
             if (fallbackKey) {
               console.warn("[rihla/chat] Gemini failed, falling back to Claude:", (geminiErr as Error).message?.slice(0, 80));
-              await streamWithAnthropic(controller, encoder, systemPrompt, body.messages);
+              await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
             } else {
               throw geminiErr;
             }
           }
         } else {
-          await streamWithAnthropic(controller, encoder, systemPrompt, body.messages);
+          await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
         }
         emit(controller, encoder, { type: "done" });
         controller.close();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        emit(controller, encoder, {
-          type: "text",
-          text: `\n[Rihla — moment technique: ${msg.slice(0, 140)}]`,
-        });
+        emit(controller, encoder, { type: "text", text: `\n[Rihla — moment technique: ${msg.slice(0, 140)}]` });
         emit(controller, encoder, { type: "done" });
         controller.close();
+      }
+
+      // Persist the assistant turn after the stream closes — fire-and-forget.
+      if (conversationId) {
+        const finalText = collectedText.join("");
+        void (async () => {
+          try {
+            if (finalText) await appendAssistantMessage(conversationId!, finalText);
+            for (const t of collectedTools) {
+              await recordToolCall({
+                conversationId: conversationId!,
+                name: t.name,
+                input: t.input,
+                succeeded: true,
+              });
+              if (t.name === "book_test_drive" && body.brandSlug) {
+                const i = t.input;
+                if (typeof i.firstName === "string" && typeof i.phone === "string" && typeof i.slug === "string") {
+                  await captureLeadFromBooking({
+                    conversationId: conversationId!,
+                    brandSlug: body.brandSlug,
+                    modelSlug: i.slug,
+                    firstName: i.firstName,
+                    phone: i.phone,
+                    city: typeof i.city === "string" ? i.city : undefined,
+                    preferredSlot: typeof i.preferredSlot === "string" ? i.preferredSlot : undefined,
+                  });
+                }
+              }
+              if (t.name === "end_call") {
+                await closeConversation(conversationId!, "closed_no_lead");
+              }
+            }
+            if (lastUserMsg) {
+              await updateFunnelCheckpoints({
+                conversationId: conversationId!,
+                userText: lastUserMsg.content,
+                assistantText: finalText,
+              });
+            }
+          } catch (err) {
+            console.warn("[chat] post-stream persistence failed:", (err as Error).message.slice(0, 100));
+          }
+        })();
       }
     },
   });

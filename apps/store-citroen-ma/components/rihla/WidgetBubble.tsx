@@ -26,6 +26,7 @@ type Msg =
 type StreamEvent =
   | { type: "text"; text: string }
   | { type: "tool"; name: string; input: Record<string, unknown> }
+  | { type: "conversation"; id: string }
   | { type: "done" };
 
 type Props = {
@@ -63,6 +64,9 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef(messages);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  // Persistence: sticky conversation id across turns. Server creates on first
+  // turn, returns it via { type: "conversation", id }, client echoes it back.
+  const conversationIdRef = useRef<string | null>(null);
 
   // Render image cards as messages when the agent calls show_model_image.
   useEffect(() => {
@@ -175,6 +179,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandSlug: brand.slug,
+          conversationId: conversationIdRef.current,
           locale: apiLocale,
           voice: false,
           messages: apiMessages,
@@ -198,7 +203,9 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
           if (!line.trim()) continue;
           let ev: StreamEvent;
           try { ev = JSON.parse(line.trim()); } catch { continue; }
-          if (ev.type === "text") {
+          if (ev.type === "conversation") {
+            conversationIdRef.current = ev.id;
+          } else if (ev.type === "text") {
             textAcc += ev.text;
             setMessages((m) => {
               const copy = [...m];

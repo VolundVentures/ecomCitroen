@@ -1,24 +1,28 @@
 import createMiddleware from "next-intl/middleware";
 import { NextRequest, NextResponse } from "next/server";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { routing } from "./i18n/routing";
 
 const intlMiddleware = createMiddleware(routing);
 
 const ADMIN_COOKIE = "admin_session";
 
-function expectedHash(): string | null {
-  const pwd = process.env.ADMIN_PASSWORD;
-  if (!pwd) return null;
-  return createHash("sha256").update(pwd).digest("hex");
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function safeEquals(a: string, b: string): boolean {
+function constantTimeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
-export default function middleware(req: NextRequest) {
+export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Admin gate.
@@ -26,9 +30,16 @@ export default function middleware(req: NextRequest) {
     if (pathname === "/admin/login" || pathname.startsWith("/admin/login/")) {
       return NextResponse.next();
     }
-    const expected = expectedHash();
+    const pwd = process.env.ADMIN_PASSWORD;
+    if (!pwd) {
+      // Misconfigured — fall through to login page.
+      const url = req.nextUrl.clone();
+      url.pathname = "/admin/login";
+      return NextResponse.redirect(url);
+    }
+    const expected = await sha256Hex(pwd);
     const got = req.cookies.get(ADMIN_COOKIE)?.value ?? "";
-    if (!expected || !safeEquals(got, expected)) {
+    if (!constantTimeEqual(got, expected)) {
       const url = req.nextUrl.clone();
       url.pathname = "/admin/login";
       url.searchParams.set("next", pathname);
