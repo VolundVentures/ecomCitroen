@@ -111,6 +111,12 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   // SEE the car the agent is talking about during a voice call).
   const [callImage, setCallImage] = useState<ImageCardPayload | null>(null);
 
+  // Bumped each time the assistant's transcript hints that the user should
+  // type something (name, phone). The CallView watches this and auto-opens
+  // the inline keyboard so the user doesn't have to find the icon.
+  const [typeRequest, setTypeRequest] = useState<{ id: number; placeholder?: string } | null>(null);
+  const lastTypeRequestSnippetRef = useRef<string>("");
+
   useEffect(() => {
     return onImageCard((payload) => {
       setMessages((m) => [...m, { kind: "image_card", role: "assistant", payload }]);
@@ -134,6 +140,9 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   const handleLiveTranscript = useCallback((text: string, fromUser: boolean) => {
     if (fromUser) {
       setMessages((m) => [...m, { kind: "text", role: "user", text }]);
+      // The user just spoke or typed → assume any pending "type" request was
+      // satisfied. Don't keep popping the keyboard for a stale ask.
+      lastTypeRequestSnippetRef.current = "";
     } else {
       setMessages((m) => {
         const copy = [...m];
@@ -145,8 +154,17 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
         }
         return copy;
       });
+
+      // Detect "please type your name / phone / number" in any language.
+      // Triggers once per fresh assistant turn — we use a snippet ref so the
+      // same chunk doesn't re-fire as more tokens stream in.
+      const detected = detectTypeRequest(text, voiceLang);
+      if (detected && detected.snippet !== lastTypeRequestSnippetRef.current) {
+        lastTypeRequestSnippetRef.current = detected.snippet;
+        setTypeRequest({ id: Date.now(), placeholder: detected.placeholder });
+      }
     }
-  }, []);
+  }, [voiceLang]);
 
   const live = useRihlaLive(
     voiceLang ?? "fr",
@@ -360,6 +378,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
       accent={accent}
       onClose={embedded ? null : () => setOpen(false)}
       callImage={callImage}
+      typeRequest={typeRequest}
     />
   );
 
@@ -494,6 +513,7 @@ type PanelProps = {
   accent: string;
   onClose: (() => void) | null;
   callImage: ImageCardPayload | null;
+  typeRequest: { id: number; placeholder?: string } | null;
 };
 
 function BubblePanel(p: PanelProps) {
@@ -516,6 +536,7 @@ function BubblePanel(p: PanelProps) {
         brandName={p.brand.name}
         locale={p.voiceLang}
         currentImage={p.callImage}
+        typeRequest={p.typeRequest}
         onSendText={(t) => {
           // Send to Gemini Live so Rihla hears it, AND surface it in the
           // session's transcript bus so it persists as a user_text message.
@@ -734,6 +755,59 @@ function switchToVoiceLabel(lang: VoiceLang | null): string {
   if (lang === "ar" || lang === "darija") return "التحول للمكالمة";
   if (lang === "en") return "Switch to voice";
   return "Passer à la voix";
+}
+
+/** Look at a fresh assistant transcript chunk and decide whether the agent
+ *  is asking the user to type something. Returns the matched snippet so we
+ *  can dedupe + a placeholder hint for the keyboard. */
+function detectTypeRequest(
+  chunk: string,
+  lang: VoiceLang | null
+): { snippet: string; placeholder?: string } | null {
+  const lower = chunk.toLowerCase();
+  // Phone-number triggers (more specific than name).
+  const phoneMatchers = [
+    /type[^.?!]{0,30}\b(phone|number|mobile|whatsapp)\b/i,
+    /tape[zr]?[^.?!]{0,30}\b(num[ée]ro|t[ée]l[ée]phone|portable|whatsapp)\b/i,
+    /[éeè]criv[a-z]*[^.?!]{0,30}\b(num[ée]ro|t[ée]l[ée]phone|portable)\b/i,
+    /اكتب[^.?!]{0,30}(رقم|الجوال|الهاتف|واتساب)/,
+    /كتب[^.?!]{0,30}(رقم|الهاتف|الواتساب)/,
+  ];
+  for (const re of phoneMatchers) {
+    if (re.test(chunk)) {
+      return { snippet: chunk.slice(0, 60), placeholder: phonePlaceholder(lang) };
+    }
+  }
+  // Name triggers.
+  const nameMatchers = [
+    /type[^.?!]{0,30}\b(first\s*name|name)\b/i,
+    /tape[zr]?[^.?!]{0,30}\b(pr[ée]nom|nom)\b/i,
+    /[éeè]criv[a-z]*[^.?!]{0,30}\b(pr[ée]nom|nom)\b/i,
+    /اكتب[^.?!]{0,30}(اسم|الاسم)/,
+    /كتب[^.?!]{0,30}(سميتك|اسمك)/,
+  ];
+  for (const re of nameMatchers) {
+    if (re.test(chunk)) {
+      return { snippet: chunk.slice(0, 60), placeholder: namePlaceholder(lang) };
+    }
+  }
+  // Lower-priority "in the chat / in the box" hint without a specific field.
+  if (/(in the chat|in the box|dans le chat|في الدردشة|في المربع)/i.test(lower)) {
+    return { snippet: chunk.slice(0, 60) };
+  }
+  return null;
+}
+
+function namePlaceholder(lang: VoiceLang | null): string {
+  if (lang === "ar" || lang === "darija") return "اكتب اسمك…";
+  if (lang === "en") return "Type your name…";
+  return "Tapez votre prénom…";
+}
+
+function phonePlaceholder(lang: VoiceLang | null): string {
+  if (lang === "ar" || lang === "darija") return "اكتب رقمك…";
+  if (lang === "en") return "Type your phone number…";
+  return "Tapez votre numéro…";
 }
 
 function teaserText(lang: VoiceLang | null, brandFirstWord: string): string {

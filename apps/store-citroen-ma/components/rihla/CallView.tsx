@@ -19,6 +19,9 @@ type CallViewProps = {
   locale?: "fr" | "ar" | "en" | "darija" | null;
   /** When the agent calls show_model_image during a voice call, render the image overlay. */
   currentImage?: ImageCardPayload | null;
+  /** When the agent asks the user to type something, this gets bumped — opens
+   *  the inline keyboard automatically, optional placeholder hint. */
+  typeRequest?: { id: number; placeholder?: string } | null;
 };
 
 const TYPE_LABELS: Record<NonNullable<CallViewProps["locale"]>, { tap: string; placeholder: string; sent: string }> = {
@@ -37,6 +40,7 @@ export function CallView({
   onSendText,
   locale,
   currentImage,
+  typeRequest,
 }: CallViewProps) {
   const minutes = Math.floor(duration / 60);
   const seconds = duration % 60;
@@ -57,19 +61,31 @@ export function CallView({
   const [typing, setTyping] = useState(false);
   const [text, setText] = useState("");
   const [sentFlash, setSentFlash] = useState(false);
+  const [autoPlaceholder, setAutoPlaceholder] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const labels = TYPE_LABELS[locale ?? "fr"];
   const isRtl = locale === "ar" || locale === "darija";
+  const placeholder = autoPlaceholder ?? labels.placeholder;
 
   useEffect(() => {
     if (typing) inputRef.current?.focus();
   }, [typing]);
+
+  // Auto-open the keyboard whenever the agent asks the user to type something
+  // (name, phone). The bubble bumps `typeRequest.id` each time the assistant
+  // turn includes a "type" trigger word.
+  useEffect(() => {
+    if (!typeRequest) return;
+    setAutoPlaceholder(typeRequest.placeholder ?? null);
+    setTyping(true);
+  }, [typeRequest]);
 
   const send = useCallback(() => {
     const t = text.trim();
     if (!t || !onSendText) return;
     onSendText(t);
     setText("");
+    setAutoPlaceholder(null);
     setSentFlash(true);
     setTimeout(() => setSentFlash(false), 1100);
   }, [text, onSendText]);
@@ -178,36 +194,39 @@ export function CallView({
           />
         </motion.div>
 
-        <div className="mt-6 text-center">
+        <div className="relative mt-6 text-center">
           <div className="text-xl font-semibold tracking-tight text-white">Rihla</div>
           <div className="mt-0.5 text-[12px] text-white/45">Conseillère · {brandName}</div>
-        </div>
 
-        <AnimatePresence>
-          {state === "speaking" && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="mt-5 flex items-end justify-center gap-1"
-            >
-              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                <motion.span
-                  key={i}
-                  className="block w-[3px] rounded-full"
-                  style={{ background: accent }}
-                  animate={{ height: [6, 16 + (i % 3) * 6, 8, 14, 6] }}
-                  transition={{ duration: 0.8, delay: i * 0.05, repeat: Infinity }}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+          {/* Equalizer is positioned ABSOLUTELY below the name so it doesn't
+              push the image card down when the agent starts speaking. */}
+          <AnimatePresence>
+            {state === "speaking" && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="pointer-events-none absolute inset-x-0 -bottom-7 flex items-end justify-center gap-1"
+              >
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="block w-[3px] rounded-full"
+                    style={{ background: accent }}
+                    animate={{ height: [6, 16 + (i % 3) * 6, 8, 14, 6] }}
+                    transition={{ duration: 0.8, delay: i * 0.05, repeat: Infinity }}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Inline car image — appears when the agent fires show_model_image
-          during a voice call. So the customer SEES the car the agent is
-          talking about. */}
+          during a voice call. Anchored fixed above the bottom controls so
+          the equalizer / avatar scaling never pushes it down or hides the
+          "View on official site" CTA. */}
       <AnimatePresence>
         {currentImage?.imageUrl && (
           <motion.div
@@ -216,7 +235,7 @@ export function CallView({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
             transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
-            className="relative z-10 -mt-2 w-[min(360px,calc(100vw-48px))] overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_18px_42px_-12px_rgba(0,0,0,0.55)]"
+            className="absolute bottom-[148px] left-1/2 z-20 w-[min(360px,calc(100vw-48px))] -translate-x-1/2 overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_18px_42px_-12px_rgba(0,0,0,0.55)]"
             style={{ boxShadow: `0 18px 42px -12px ${accent}55, 0 0 0 1px rgba(255,255,255,0.08)` }}
           >
             <div className="relative aspect-[16/10] w-full overflow-hidden">
@@ -272,7 +291,7 @@ export function CallView({
                   if (e.key === "Enter") { e.preventDefault(); send(); }
                   if (e.key === "Escape") { setTyping(false); setText(""); }
                 }}
-                placeholder={labels.placeholder}
+                placeholder={placeholder}
                 className="flex-1 bg-transparent px-3 py-2 text-[13.5px] text-white outline-none placeholder:text-white/35"
               />
               <motion.button
