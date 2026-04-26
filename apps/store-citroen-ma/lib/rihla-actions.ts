@@ -16,6 +16,30 @@ const SECTION_EVENT = "rihla:scroll";
 const FINANCING_EVENT = "rihla:financing";
 const END_CALL_EVENT = "rihla:end-call";
 const TEST_DRIVE_EVENT = "rihla:test-drive";
+const IMAGE_CARD_EVENT = "rihla:image-card";
+
+export type ImageCardPayload = {
+  /** Model slug — used to look up image in brand catalog if imageUrl missing. */
+  modelSlug?: string;
+  /** Full image URL (local /brands/... path or remote). Wins over modelSlug lookup. */
+  imageUrl?: string;
+  caption?: string;
+  /** Optional CTA shown under the image — opens ctaUrl in a new tab. */
+  ctaLabel?: string;
+  ctaUrl?: string;
+};
+
+export function emitImageCard(payload: ImageCardPayload) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<ImageCardPayload>(IMAGE_CARD_EVENT, { detail: payload }));
+}
+
+export function onImageCard(cb: (p: ImageCardPayload) => void) {
+  if (typeof window === "undefined") return () => {};
+  const listener = (e: Event) => cb((e as CustomEvent<ImageCardPayload>).detail);
+  window.addEventListener(IMAGE_CARD_EVENT, listener);
+  return () => window.removeEventListener(IMAGE_CARD_EVENT, listener);
+}
 
 export type TestDrivePayload = {
   slug?: string;
@@ -97,20 +121,46 @@ export type RihlaToolCall = {
   input: Record<string, unknown>;
 };
 
+/**
+ * Brand catalog passed in widget mode. When present, tools that "show a model"
+ * resolve to image cards / new-tab page opens instead of router pushes — there's
+ * no local model page on the demo widget surface.
+ */
+export type WidgetBrand = {
+  slug: string;
+  homepageUrl: string;
+  models: Array<{
+    slug: string;
+    name: string;
+    heroImage: string;
+    galleryImages: string[];
+    pageUrl: string;
+  }>;
+};
+
 type DispatchCtx = {
   locale: string;
   router: { push: (href: string) => void };
   currentPath?: string;
+  brand?: WidgetBrand;
 };
 
 /** Resolve a tool_use call to an outcome description the model sees next turn. */
 export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string {
   const { name, input } = call;
-  const { locale, router, currentPath = "" } = ctx;
+  const { locale, router, currentPath = "", brand } = ctx;
+
+  // In widget mode, we delegate "show me a model" intents to image cards and
+  // "go to the page" intents to opening the brand site in a new tab.
+  const widgetMode = !!brand;
+  const findModel = (slug: string) =>
+    brand?.models.find((m) => m.slug === slug || m.slug === slug.toLowerCase());
 
   try {
     switch (name) {
       case "navigate_to": {
+        // Legacy storefront-only tool. In widget mode, ignore.
+        if (widgetMode) return "navigate_to is disabled in widget mode";
         const raw = String(input.path ?? "/");
         const path = raw.startsWith("/") ? raw : `/${raw}`;
         const localePrefixed = path.startsWith(`/${locale}`) ? path : `/${locale}${path}`;
@@ -118,9 +168,54 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
         router.push(localePrefixed);
         return `navigated to ${localePrefixed}`;
       }
+      case "show_model_image": {
+        const slug = String(input.slug ?? input.modelSlug ?? "");
+        const model = slug ? findModel(slug) : undefined;
+        const imageUrl = typeof input.imageUrl === "string" ? input.imageUrl : model?.heroImage;
+        if (!imageUrl) return `no image for slug "${slug}"`;
+        const caption =
+          typeof input.caption === "string"
+            ? input.caption
+            : model
+            ? model.name
+            : undefined;
+        emitImageCard({
+          modelSlug: slug || undefined,
+          imageUrl,
+          caption,
+          ctaLabel: model ? "Voir sur le site officiel" : undefined,
+          ctaUrl: model?.pageUrl,
+        });
+        return `showed image for ${slug || "model"}`;
+      }
+      case "open_brand_page": {
+        const slug = String(input.slug ?? "");
+        const model = slug ? findModel(slug) : undefined;
+        const url = typeof input.url === "string" ? input.url : model?.pageUrl ?? brand?.homepageUrl;
+        if (!url) return "no URL to open";
+        if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+        return `opened ${url} in new tab`;
+      }
       case "open_model": {
-        const slug = String(input.slug ?? "c3-aircross");
-        const target = `/${locale}/models/${slug}`;
+        const slug = String(input.slug ?? "");
+        // Widget mode: prefer showing an image card + offering the brand page,
+        // not routing to a local /models/[slug] page that doesn't exist.
+        if (widgetMode) {
+          const model = findModel(slug);
+          if (model) {
+            emitImageCard({
+              modelSlug: slug,
+              imageUrl: model.heroImage,
+              caption: model.name,
+              ctaLabel: "Voir sur le site officiel",
+              ctaUrl: model.pageUrl,
+            });
+            return `showed ${slug} (widget mode)`;
+          }
+          return `unknown model "${slug}"`;
+        }
+        // Legacy storefront mode.
+        const target = `/${locale}/models/${slug || "c3-aircross"}`;
         if (currentPath === target) return "already on that model page";
         router.push(target);
         return `opened model detail for ${slug}`;

@@ -1,15 +1,17 @@
 import { NextRequest } from "next/server";
 import { GoogleGenAI, Type, type Tool, type Content } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
-import { RIHLA_MODELS, buildSystemPrompt } from "@citroen-store/rihla-agent";
-import { maMarket } from "@citroen-store/market-config";
+import { RIHLA_MODELS, buildSystemPrompt, type BrandContext } from "@citroen-store/rihla-agent";
+import { getBrandContext, toAgentContext } from "@/lib/brand-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ChatRequest = {
-  locale?: "fr" | "ar" | "darija" | "en";
+  /** Required for widget mode — the brand whose prompt + catalog to use. */
+  brandSlug?: string;
+  locale?: "fr" | "ar" | "darija" | "en" | "ar-SA" | "en-SA";
   messages: ChatMessage[];
   dealerCityHint?: string;
   returningUser?: boolean;
@@ -26,12 +28,31 @@ const FALLBACK_BY_LOCALE = {
   en: "I'm Rihla. Are you looking for a car for the city, the family, or a specific use?",
 } as const;
 
-function mapLocaleToRihla(l?: string): "fr-MA" | "ar-MA" | "darija-MA" | "en-MA" {
+function mapLocaleToRihla(l?: string, market?: string): "fr-MA" | "ar-MA" | "darija-MA" | "en-MA" | "ar-SA" | "en-SA" {
+  // Saudi market resolves to KSA locales
+  if (market === "SA") {
+    if (l === "ar" || l === "ar-SA") return "ar-SA";
+    return "en-SA";
+  }
   if (l === "darija") return "darija-MA";
   if (l === "ar") return "ar-MA";
   if (l === "en") return "en-MA";
   return "fr-MA";
 }
+
+/** Minimal brand fallback for legacy citroen-ma calls without brandSlug. */
+const CITROEN_FALLBACK: BrandContext = {
+  brandSlug: "citroen-ma",
+  brandName: "Citroën Maroc",
+  agentName: "Rihla",
+  market: "MA",
+  defaultCurrency: "MAD",
+  models: [
+    { slug: "c3-aircross", name: "C3 Aircross", priceFrom: 234900, currency: "MAD", fuel: "Hybrid", seats: 5 },
+    { slug: "c5-aircross", name: "C5 Aircross", priceFrom: 295900, currency: "MAD", fuel: "PHEV", seats: 5 },
+    { slug: "berlingo", name: "Berlingo", priceFrom: 195900, currency: "MAD", fuel: "Diesel", seats: 7 },
+  ],
+};
 
 /* ───────────────────────────── Navigation tools ───────────────────────────── */
 
@@ -111,13 +132,34 @@ const GEMINI_NAV_TOOLS: Tool[] = [
         },
       },
       {
+        name: "show_model_image",
+        description: "Display a photo of a specific model inline in the chat. Call whenever you mention or recommend a model.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            slug: { type: Type.STRING },
+            caption: { type: Type.STRING },
+          },
+          required: ["slug"],
+        },
+      },
+      {
+        name: "open_brand_page",
+        description: "Open the official brand-site page for a model in a new browser tab.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: { slug: { type: Type.STRING } },
+          required: ["slug"],
+        },
+      },
+      {
         name: "book_test_drive",
         description:
           "Book a test drive for a qualified lead. Call at the end of the flow once you have first name, mobile number, city, and preferred slot.",
         parameters: {
           type: Type.OBJECT,
           properties: {
-            slug: { type: Type.STRING, enum: ["c3-aircross", "c5-aircross", "berlingo"] },
+            slug: { type: Type.STRING },
             firstName: { type: Type.STRING },
             phone: { type: Type.STRING },
             city: { type: Type.STRING },
@@ -145,7 +187,9 @@ const ANTHROPIC_NAV_TOOLS: Anthropic.Messages.Tool[] = [
   { name: "open_dealers", description: "Open dealers.", input_schema: { type: "object" as const, properties: {}, required: [] } },
   { name: "open_financing", description: "Open financing.", input_schema: { type: "object" as const, properties: {}, required: [] } },
   { name: "scroll_to", description: "Scroll to section.", input_schema: { type: "object" as const, properties: { section: { type: "string" as const } }, required: ["section"] } },
-  { name: "book_test_drive", description: "Book a test drive once you have firstName + phone + city + slot.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const, enum: ["c3-aircross", "c5-aircross", "berlingo"] }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["slug", "firstName", "phone"] } },
+  { name: "show_model_image", description: "Display a photo of a specific model inline in the chat.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, caption: { type: "string" as const } }, required: ["slug"] } },
+  { name: "open_brand_page", description: "Open the official brand-site page for a model in a new browser tab.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const } }, required: ["slug"] } },
+  { name: "book_test_drive", description: "Book a test drive once you have firstName + phone + city + slot.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["slug", "firstName", "phone"] } },
   { name: "end_call", description: "End the conversation right after a farewell phrase. Never keep the session open after saying goodbye.", input_schema: { type: "object" as const, properties: {}, required: [] } },
 ];
 
@@ -352,12 +396,30 @@ async function streamWithAnthropic(
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as ChatRequest;
-  const locale = mapLocaleToRihla(body.locale);
   const encoder = new TextEncoder();
+
+  // Load brand context if a brandSlug is provided AND Supabase is configured.
+  // Falls back to a minimal hard-coded Citroën catalog for legacy calls.
+  let brand: BrandContext = CITROEN_FALLBACK;
+  let customBody: string | undefined;
+  if (body.brandSlug && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const ctx = await getBrandContext(body.brandSlug);
+      if (ctx) {
+        brand = toAgentContext(ctx);
+        customBody = ctx.activePrompt?.body ?? undefined;
+      }
+    } catch (err) {
+      console.warn("[chat] failed to load brand context, using fallback:", (err as Error).message);
+    }
+  }
+
+  const locale = mapLocaleToRihla(body.locale, brand.market);
 
   const baseSystem = buildSystemPrompt({
     locale,
-    marketId: maMarket.marketId,
+    brand,
+    customBody,
     dealerCityHint: body.dealerCityHint,
     returningUser: body.returningUser,
     sessionSummary: body.sessionSummary,
@@ -373,7 +435,11 @@ export async function POST(req: NextRequest) {
     : "none";
 
   if (provider === "none") {
-    const fallback = FALLBACK_BY_LOCALE[body.locale ?? "fr"] ?? FALLBACK_BY_LOCALE.fr;
+    const fallbackKey = (body.locale ?? "fr").startsWith("ar") ? "ar"
+      : (body.locale ?? "fr").startsWith("en") ? "en"
+      : body.locale === "darija" ? "darija"
+      : "fr";
+    const fallback = FALLBACK_BY_LOCALE[fallbackKey as keyof typeof FALLBACK_BY_LOCALE] ?? FALLBACK_BY_LOCALE.fr;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         for (const token of fallback.split(/(\s+)/)) {

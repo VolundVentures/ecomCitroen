@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { buildSystemPrompt } from "@citroen-store/rihla-agent";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -93,12 +92,35 @@ const LIVE_TOOLS = [
         },
       },
       {
+        name: "show_model_image",
+        description: "Display a photo of a specific model inline in the chat. Call when you recommend a model or the user asks to see one.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            slug: { type: "STRING", description: "The model slug (e.g. 'wrangler', 'c3-aircross', '5008')." },
+            caption: { type: "STRING", description: "Optional one-line caption shown under the image." },
+          },
+          required: ["slug"],
+        },
+      },
+      {
+        name: "open_brand_page",
+        description: "Open the official brand-site page for a model in a new browser tab. Use when the user wants to see more details, specs, or configure on the official site.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            slug: { type: "STRING", description: "The model slug." },
+          },
+          required: ["slug"],
+        },
+      },
+      {
         name: "book_test_drive",
         description: "Book a test drive for a qualified lead. Call at the end of the flow after collecting first name, mobile number, city, and preferred time slot.",
         parameters: {
           type: "OBJECT",
           properties: {
-            slug: { type: "STRING", enum: ["c3-aircross", "c5-aircross", "berlingo"] },
+            slug: { type: "STRING" },
             firstName: { type: "STRING" },
             phone: { type: "STRING" },
             city: { type: "STRING" },
@@ -121,7 +143,8 @@ const LIVE_TOOLS = [
 export function useRihlaLive(
   locale: string,
   voiceName: string = "Zephyr",
-  callbacks: LiveCallbacks
+  callbacks: LiveCallbacks,
+  brandSlug?: string
 ) {
   const [state, setState] = useState<LiveState>("idle");
   const wsRef = useRef<WebSocket | null>(null);
@@ -339,50 +362,27 @@ export function useRihlaLive(
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      const promptLocale: "fr-MA" | "ar-MA" | "darija-MA" | "en-MA" =
-        locale === "darija" ? "darija-MA"
-        : locale === "ar" ? "ar-MA"
-        : locale === "en" ? "en-MA"
-        : "fr-MA";
-      const systemPrompt = buildSystemPrompt({
-        locale: promptLocale,
-        marketId: "ma",
-      });
-
-      const openingByLocale: Record<typeof promptLocale, string> = {
-        "fr-MA": "Bonjour ! Je suis Rihla, conseillère Citroën. Vous cherchez une voiture pour la ville, la famille, ou un usage précis ?",
-        "darija-MA": "مرحبا بيك ! أنا رحلة من سيتروين. كتقلب على طوموبيل للمدينة، للعائلة، ولا لاستعمال معين ؟",
-        "ar-MA": "أهلاً وسهلاً ! أنا رحلة، مستشارتكم في سيتروين. هل تبحثون عن سيارة للمدينة، للعائلة، أم لاستخدام محدد ؟",
-        "en-MA": "Hello! I'm Rihla from Citroën. Are you looking for a car for the city, for the family, or a specific use?",
-      };
-      const languageReminderByLocale: Record<typeof promptLocale, string> = {
-        "fr-MA": "LANGUAGE: Speak in CLEAN STANDARD FRENCH only. No Moroccan accent. No darija words. No 'Merhba', no 'Hamdulillah', no 'Inshallah'. Pronounce like a French radio presenter.",
-        "darija-MA": "LANGUAGE: Speak in Moroccan Darija only. Arabic script in transcripts.",
-        "ar-MA": "LANGUAGE: Speak in Modern Standard Arabic (fus'ha). No Moroccan dialect words.",
-        "en-MA": "LANGUAGE: Speak in clean neutral English only. No Moroccan/Arabic greetings mixed in.",
-      };
-
-      const voicePromptSuffix = `\n\nVOICE MODE — YOU ARE ON A LIVE PHONE CALL:
-
-${languageReminderByLocale[promptLocale]}
-
-SPEECH RULES:
-- NO markdown, asterisks, emojis, bullet lists. Plain spoken words only.
-- 1 to 2 short sentences per turn. Like a real phone call.
-- NEVER say technical parameter names: no "slug", "c3-aircross", "color red". Say "le C3 Aircross", "en rouge Elixir".
-- Spell numbers and prices in words.
-- Repeat phone numbers back digit by digit to confirm ("zéro six six un, deux trois, quatre cinq, six sept, c'est bien ça ?").
-
-CALL BEHAVIOR:
-- YOU speak FIRST when the call connects. Start with this EXACT opening: "${openingByLocale[promptLocale]}"
-- Follow the 8-turn qualification flow from the system prompt STRICTLY. One question per turn.
-- Collect in order: usage → budget → recommendation + open_model → first name → mobile → city → time slot → book_test_drive + end_call.
-- When the user says goodbye, thanks, or after a booking confirmation: say a warm farewell in ONE sentence, then IMMEDIATELY call end_call. Never keep the call open.
-
-TOOL USE:
-- Say one natural sentence BEFORE each tool call. Never expose parameter names.
-- Call end_call right after any farewell. Call book_test_drive once you have first name + phone + city + slot.`;
+    ws.onopen = async () => {
+      // Fetch the assembled system prompt + greeting from the server. The server
+      // has access to Supabase (brand catalog + custom prompt body); the client
+      // doesn't.
+      let systemPrompt = "";
+      let resolvedVoice = voiceName;
+      try {
+        const params = new URLSearchParams({
+          locale,
+          voice: "1",
+          ...(brandSlug ? { brand: brandSlug } : {}),
+        });
+        const res = await fetch(`/api/rihla/system-prompt?${params}`);
+        if (res.ok) {
+          const j = (await res.json()) as { systemPrompt: string; voiceName?: string };
+          systemPrompt = j.systemPrompt;
+          if (j.voiceName) resolvedVoice = j.voiceName;
+        }
+      } catch (err) {
+        console.warn("[rihla-live] system-prompt fetch failed", err);
+      }
 
       ws.send(
         JSON.stringify({
@@ -391,10 +391,10 @@ TOOL USE:
             generationConfig: {
               responseModalities: ["AUDIO"],
               speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: resolvedVoice } },
               },
             },
-            systemInstruction: { parts: [{ text: systemPrompt + voicePromptSuffix }] },
+            systemInstruction: { parts: [{ text: systemPrompt }] },
             tools: LIVE_TOOLS,
           },
         })
@@ -419,7 +419,7 @@ TOOL USE:
       updateState("idle");
       stopMic();
     };
-  }, [locale, voiceName, handleMessage, startMic, updateState]);
+  }, [locale, voiceName, brandSlug, handleMessage, startMic, updateState]);
 
   // ─── Disconnect ───────────────────────────────────────────────────────────
 

@@ -1,0 +1,160 @@
+{
+  "slug": "jeep-ma",
+  "name": "Jeep Maroc",
+  "homepage": "https://www.jeep.com/ma/index.html",
+  "market": "MA",
+  "defaultCurrency": "MAD",
+  "scrapedAt": "2026-04-26T11:59:53.096Z",
+  "models": [
+    {
+      "name": "Avenger",
+      "tagline": "À PARTIR DE 272 000 DHS",
+      "description": "La Jeep® Avenger incarne l'ADN de la marque en proposant une combinaison unique de style, de fonctionnalité et de technologie.",
+      "bodyType": "SUV",
+      "priceFrom": 272000,
+      "currency": "DHS",
+      "fuel": "Electric, Hybrid",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/jeep-ma/avenger/hero.jpg",
+      "galleryImages": [
+        "/brands/jeep-ma/avenger/gallery-1.jpg",
+        "/brands/jeep-ma/avenger/gallery-2.jpg",
+        "/brands/jeep-ma/avenger/gallery-3.jpg",
+        "/brands/jeep-ma/avenger/gallery-4.jpg",
+        "/brands/jeep-ma/avenger/gallery-5.jpg",
+        "/brands/jeep-ma/avenger/gallery-6.jpg"
+      ],
+      "keyFeatures": [
+        "Première Jeep 100% électrique",
+        "Système Selec-Terrain® pour d'excellentes capacités tout terrain",
+        "Coffre de 380 litres avec banquette arrière rabattable",
+        "Écran numérique de 10,25'' pour l'infodivertissement",
+        "Sièges en cuir avec fonction massage pour le conducteur",
+        "Récompensée Voiture de l'Année européenne 2023"
+      ],
+      "specs": {},
+      "slug": "avenger",
+      "pageUrl": "https://www.jeep.com/ma/2024/jeep-avenger/new-jeep-avenger.html"
+    },
+    {
+      "name": "Jeep® Compass",
+      "tagline": "E-HYBRID",
+      "description": "Avec la nouvelle Jeep® Compass, inutile de faire semblant ! Authentique SUV, Jeep® oblige, il est capable de vous accompagner dans toutes vos aventures, avec sa version hybride.",
+      "bodyType": "SUV",
+      "priceFrom": 369000,
+      "currency": "MAD",
+      "fuel": "E-Hybrid",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/jeep-ma/compass/hero.jpg",
+      "galleryImages": [
+        "/brands/jeep-ma/compass/gallery-1.png",
+        "/brands/jeep-ma/compass/gallery-2.png",
+        "/brands/jeep-ma/compass/gallery-3.png",
+        "/brands/jeep-ma/compass/gallery-4.png",
+        "/brands/jeep-ma/compass/gallery-5.png",
+        "/brands/jeep-ma/compass/gallery-6.png"
+      ],
+      "keyFeatures": [
+        "Distinctif et fonctionnel, ADN Jeep à l’état pur.",
+        "Assistance à la conduite semi-autonome et projecteurs Matrix LED.",
+        "145 ch associés à une boîte de vitesses automatique double embrayage à 6 rapports.",
+        "Système Selec-Terrain et protection à 360° pour aller partout.",
+        "Confort avec 550 litres de coffre, 34 litres de rangement intérieur à l'avant."
+      ],
+      "specs": {},
+      "slug": "compass",
+      "pageUrl": "https://www.jeep.com/ma/2026/compass0.html"
+    },
+    {
+      "name": "Wrangler",
+      "tagline": "Le retour d’une icône",
+      "description": "Partez à la conquête de nouvelles aventures avec le tout nouveau Jeep Wrangler 4xe hybride rechargeable. Son design extérieur repensé, son habitacle plus spacieux et confortable, ainsi que ses performances hors du commun en font un compagnon de route idéal.",
+      "bodyType": "SUV",
+      "priceFrom": 844000,
+      "currency": "MAD",
+      "fuel": "Hybride rechargeable",
+      "transmission": "Automatique",
+      "seats": 5,
+      "heroImage": "/brands/jeep-ma/wrangler/hero.jpg",
+      "galleryImages": [
+        "/brands/jeep-ma/wrangler/gallery-1.png",
+        "/brands/jeep-ma/wrangler/gallery-2.png",
+        "/brands/jeep-ma/wrangler/gallery-3.png",
+        "/brands/jeep-ma/wrangler/gallery-4.png"
+      ],
+      "keyFeatures": [
+        "Système d'infodivertissement Uconnect® 5 de 12,3 pouces",
+        "Sièges chauffants haut de gamme à 12 voies électriques",
+        "Jantes en alliage de 18\"",
+        "Design iconique avec une calandre emblématique",
+        "Toit rétractable Sky One-Touch",
+        "Performances hors route exceptionnelles."
+      ],
+      "specs": {},
+      "slug": "wrangler",
+      "pageUrl": "https://www.jeep.com/ma/2024/jeep-wrangler/new-jeep-wrangler.html"
+    },
+    {
+      "name": "Grand Cherokee",
+      "tagline": "LE RAFFINEMENT ULTIME",
+      "description": "Le nouveau Jeep® Grand Cherokee présente un design élégant et captivant, un tout nouvel intérieur, une technologie innovante et un équilibre parfait entre dynamisme et performances.",
+      "bodyType": "SUV",
+      "priceFrom": 664000,
+      "currency": "DHS",
+      "fuel": "Hybrid",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/jeep-ma/grand-cherokee/hero.png",
+      "galleryImages": [
+        "/brands/jeep-ma/grand-cherokee/gallery-1.jpg",
+        "/brands/jeep-ma/grand-cherokee/gallery-2.jpg",
+        "/brands/jeep-ma/grand-cherokee/gallery-3.jpg",
+        "/brands/jeep-ma/grand-cherokee/gallery-4.jpg",
+        "/brands/jeep-ma/grand-cherokee/gallery-5.jpg"
+      ],
+      "keyFeatures": [
+        "360 Camera System",
+        "Advanced Safety Features",
+        "Premium McIntosh Audio System",
+        "Uconnect™ Infotainment",
+        "Spacious and Comfortable Interior",
+        "Enhanced Off-Road Capability"
+      ],
+      "specs": {},
+      "slug": "grand-cherokee",
+      "pageUrl": "https://www.jeep.com/ma/2024/jeep-grand-cherokee/plug-in.html"
+    },
+    {
+      "name": "Jeep Renegade e-Hybrid",
+      "tagline": "UNE EXPÉRIENCE HYBRIDE UNIQUE",
+      "description": "Le nouvelle Jeep® Renegade e-Hybrid associe la puissance d'un moteur électrique à un moteur à essence, pour offrir une expérience de conduite hybride avec un fonctionnement 100 % électrique à basse vitesse.",
+      "bodyType": "SUV",
+      "priceFrom": 284000,
+      "currency": "DHS",
+      "fuel": "Hybrid",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/jeep-ma/renegade/hero.png",
+      "galleryImages": [
+        "/brands/jeep-ma/renegade/gallery-1.jpg",
+        "/brands/jeep-ma/renegade/gallery-2.png",
+        "/brands/jeep-ma/renegade/gallery-3.jpg",
+        "/brands/jeep-ma/renegade/gallery-4.jpg",
+        "/brands/jeep-ma/renegade/gallery-5.jpg"
+      ],
+      "keyFeatures": [
+        "E-HYBRIDE 1.5 T4 TURBO BOÎTE AUTOMATIQUE À 7 RAPPORTS",
+        "UNE PUISSANCE TOTALE ALLANT JUSQU'À 130 CH",
+        "Un couple maximal de 240 Nm",
+        "5,5 L - 5,7 L/100 km de consommation de carburant",
+        "Full-LED avant et arrière",
+        "Système multimédia à écran tactile 7\" avec Apple CarPlay ™ et Android Auto™"
+      ],
+      "specs": {},
+      "slug": "renegade",
+      "pageUrl": "https://www.jeep.com/ma/2024/jeep-renegade/new-jeep-renegade.html"
+    }
+  ]
+}

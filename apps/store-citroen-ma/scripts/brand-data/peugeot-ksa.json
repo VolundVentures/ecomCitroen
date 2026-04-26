@@ -1,0 +1,181 @@
+{
+  "slug": "peugeot-ksa",
+  "name": "Peugeot KSA",
+  "homepage": "https://ksa.peugeot.com/en/",
+  "market": "SA",
+  "defaultCurrency": "SAR",
+  "scrapedAt": "2026-04-26T12:09:00.929Z",
+  "models": [
+    {
+      "name": "Boxer",
+      "tagline": "YOUR BUSINESS PARTNER",
+      "description": "New design, modular interior, increased capacity, and adaptable to your needs. The new BOXER diesel van is the perfect complement to your business requirements.",
+      "bodyType": "Van",
+      "priceFrom": 0,
+      "currency": "SAR",
+      "fuel": "Diesel",
+      "transmission": "Manual",
+      "seats": 3,
+      "heroImage": "/brands/peugeot-ksa/boxer/hero.png",
+      "galleryImages": [
+        "/brands/peugeot-ksa/boxer/gallery-1.jpg"
+      ],
+      "keyFeatures": [
+        "Usable volume up to 17 m³.",
+        "Payload capacity of up to 2,025 kg.",
+        "Best-in-class fuel economy: 11.5 km/l.",
+        "Powered by a 2.2L diesel engine with 140 hp.",
+        "Moduwork® bench seat and sliding side doors."
+      ],
+      "specs": {},
+      "slug": "boxer",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/new-peugeot-boxer.html"
+    },
+    {
+      "name": "Peugeot Traveller",
+      "tagline": "ALLURE MAKES YOUR BUSINESS BETTER",
+      "description": "With its assertive design and connected interior, the NEW TRAVELLER brings verve and style to your day.",
+      "bodyType": "Van",
+      "priceFrom": 0,
+      "currency": "SAR",
+      "fuel": "Diesel",
+      "transmission": "Automatic",
+      "seats": 9,
+      "heroImage": "/brands/peugeot-ksa/traveller/hero.png",
+      "galleryImages": [
+        "/brands/peugeot-ksa/traveller/gallery-1.png",
+        "/brands/peugeot-ksa/traveller/gallery-2.png"
+      ],
+      "keyFeatures": [
+        "Up to 348 km WLTP range with the 75kWh battery.",
+        "Versatile configurations for urban transport.",
+        "Generous boot volume of up to 4554 litres.",
+        "Advanced driving aids for enhanced safety.",
+        "Stylish interior design with connected infotainment."
+      ],
+      "specs": {},
+      "slug": "traveller",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/new-peugeot-traveller.html"
+    },
+    {
+      "name": "Expert",
+      "tagline": "THE PROFESSIONAL CHOICE",
+      "description": "The new PEUGEOT Expert is built to meet the needs of all business users with its renewed design and Moduwork® modular system.",
+      "bodyType": "Van",
+      "priceFrom": 6100,
+      "currency": "SAR",
+      "fuel": "Diesel",
+      "transmission": "Automatic",
+      "seats": 3,
+      "heroImage": "/brands/peugeot-ksa/expert/hero.png",
+      "galleryImages": [
+        "/brands/peugeot-ksa/expert/gallery-1.png"
+      ],
+      "keyFeatures": [
+        "Best-in-class fuel economy",
+        "Payload capacity of 1,357 kg",
+        "Equipped with Cruise Control and speed limiter for reduced driver fatigue."
+      ],
+      "specs": {},
+      "slug": "expert",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/new-peugeot-expert.html"
+    },
+    {
+      "name": "5008",
+      "tagline": "THE CLASS-ABOVE LARGE SUV 7-SEATS",
+      "description": "Discover the All-New 5008, the class-above large SUV with seven seats, stylish yet robust lines and the new PEUGEOT panoramic i-Cockpit®.",
+      "bodyType": "SUV",
+      "priceFrom": 0,
+      "currency": "SAR",
+      "fuel": "Gasoline",
+      "transmission": "6-speed automatic",
+      "seats": 7,
+      "heroImage": "/brands/peugeot-ksa/5008/hero.png",
+      "galleryImages": [
+        "/brands/peugeot-ksa/5008/gallery-1.jpg"
+      ],
+      "keyFeatures": [
+        "Exceptional living space with flexible 7-seat configuration",
+        "New PEUGEOT panoramic i-Cockpit® with a 21'' HD curved display",
+        "Agility and manoeuvrability with a 360° field of vision and numerous driving aids"
+      ],
+      "specs": {},
+      "slug": "5008",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/new-peugeot-5008/all-new.html"
+    },
+    {
+      "name": "2008",
+      "tagline": "THE FEISTY AND AGILE SUV",
+      "description": "The new PEUGEOT 2008 compact SUV effortlessly redefines SUV codes with its distinctive styling, featuring new signature lights and a wide grille for a more assertive presence.",
+      "bodyType": "SUV",
+      "priceFrom": 0,
+      "currency": "MAD",
+      "fuel": "Petrol",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/peugeot-ksa/2008/hero.png",
+      "galleryImages": [
+        "/brands/peugeot-ksa/2008/gallery-1.png"
+      ],
+      "keyFeatures": [
+        "Advanced Grip Control for all terrains",
+        "PEUGEOT i-Cockpit® with customizable digital display",
+        "Generous boot space of up to 1467L",
+        "Latest generation driving aids for enhanced safety",
+        "Signature 3 claw LED headlights"
+      ],
+      "specs": {},
+      "slug": "2008",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/2008.html"
+    },
+    {
+      "name": "3008",
+      "tagline": "Discover the all-new 3008 with a stunning fastback SUV silhouette.",
+      "description": "The all-new Peugeot 3008 features an innovative fastback SUV design, enhanced performance, and a next-generation panoramic i-Cockpit® that elevates driving pleasure.",
+      "bodyType": "SUV",
+      "priceFrom": 0,
+      "currency": "SAR",
+      "fuel": "Gasoline",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/peugeot-ksa/3008/hero.png",
+      "galleryImages": [],
+      "keyFeatures": [
+        "Fastback SUV silhouette with feline stance.",
+        "Panoramic 21'' curved display on the dash.",
+        "More than 40 driving aids for safety.",
+        "180 horsepower for enhanced performance.",
+        "Optimized aerodynamics for efficiency."
+      ],
+      "specs": {},
+      "slug": "3008",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/peugeot-3008/all-new.html"
+    },
+    {
+      "name": "408",
+      "tagline": "Inspiring fastback shape.",
+      "description": "The PEUGEOT 408 combines a sleek design with advanced technology, offering a unique driving experience with a modern interior and a host of driver assistance features.",
+      "bodyType": "Sedan",
+      "priceFrom": 0,
+      "currency": "SAR",
+      "fuel": "Petrol",
+      "transmission": "Automatic",
+      "seats": 5,
+      "heroImage": "/brands/peugeot-ksa/408/hero.png",
+      "galleryImages": [
+        "/brands/peugeot-ksa/408/gallery-1.png",
+        "/brands/peugeot-ksa/408/gallery-2.png"
+      ],
+      "keyFeatures": [
+        "Latest generation PEUGEOT i-Cockpit®.",
+        "Fully configurable i-Toggles for personalized settings.",
+        "Advanced driver assistance systems including semi-autonomous driving.",
+        "Spacious boot with a capacity of up to 536 L.",
+        "Ergonomically designed with quality materials."
+      ],
+      "specs": {},
+      "slug": "408",
+      "pageUrl": "https://ksa.peugeot.com/en/our-models/new-408.html"
+    }
+  ]
+}
