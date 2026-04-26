@@ -17,6 +17,38 @@ const FINANCING_EVENT = "rihla:financing";
 const END_CALL_EVENT = "rihla:end-call";
 const TEST_DRIVE_EVENT = "rihla:test-drive";
 const IMAGE_CARD_EVENT = "rihla:image-card";
+const SHOWROOMS_EVENT = "rihla:showrooms";
+
+export type ShowroomItem = {
+  id: string;
+  name: string;
+  city: string;
+  address: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  hours: string | null;
+  service_centre: boolean;
+  primary_dealer: boolean;
+};
+
+export type ShowroomsPayload = {
+  city?: string;
+  brandName?: string;
+  items: ShowroomItem[];
+};
+
+export function emitShowrooms(payload: ShowroomsPayload) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<ShowroomsPayload>(SHOWROOMS_EVENT, { detail: payload }));
+}
+
+export function onShowrooms(cb: (p: ShowroomsPayload) => void) {
+  if (typeof window === "undefined") return () => {};
+  const listener = (e: Event) => cb((e as CustomEvent<ShowroomsPayload>).detail);
+  window.addEventListener(SHOWROOMS_EVENT, listener);
+  return () => window.removeEventListener(SHOWROOMS_EVENT, listener);
+}
 
 export type ImageCardPayload = {
   /** Model slug — used to look up image in brand catalog if imageUrl missing. */
@@ -128,6 +160,8 @@ export type RihlaToolCall = {
  */
 export type WidgetBrand = {
   slug: string;
+  /** Display name used in UI labels and showroom-card headings. */
+  name?: string;
   homepageUrl: string;
   models: Array<{
     slug: string;
@@ -269,6 +303,38 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
       case "end_call": {
         emitEndCall();
         return "call ended";
+      }
+      case "find_showrooms": {
+        const city = typeof input.city === "string" ? input.city : undefined;
+        const brandSlug = brand?.slug;
+        if (!brandSlug) return "no brand context for showroom lookup";
+        // Fire-and-forget: hit the server endpoint, then emit a UI event.
+        const params = new URLSearchParams({ brand: brandSlug });
+        if (city) params.set("city", city);
+        if (typeof window !== "undefined") {
+          fetch(`/api/rihla/showrooms?${params}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((j) => {
+              const items = (j?.items ?? []) as ShowroomItem[];
+              if (items.length === 0) return;
+              emitShowrooms({ city, brandName: brand?.name, items });
+            })
+            .catch(() => {});
+        }
+        // Tell the model how many we'll show so it can phrase its turn well.
+        return `showroom lookup dispatched for "${city ?? "all cities"}"`;
+      }
+      case "book_showroom_visit": {
+        const payload: TestDrivePayload = {
+          slug: typeof input.slug === "string" ? input.slug : undefined,
+          firstName: typeof input.firstName === "string" ? input.firstName : undefined,
+          phone: typeof input.phone === "string" ? input.phone : undefined,
+          city: typeof input.city === "string" ? input.city : undefined,
+          preferredSlot: typeof input.preferredSlot === "string" ? input.preferredSlot : undefined,
+        };
+        // Reuse the test-drive lead pipeline; mark it as a showroom visit via slug suffix.
+        emitTestDrive(payload);
+        return `showroom visit booked for ${payload.firstName ?? "lead"} (${payload.phone ?? "no phone"}) in ${payload.city ?? "—"}`;
       }
       case "book_test_drive": {
         const payload: TestDrivePayload = {

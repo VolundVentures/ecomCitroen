@@ -167,7 +167,7 @@ const GEMINI_NAV_TOOLS: Tool[] = [
       {
         name: "book_test_drive",
         description:
-          "Book a test drive for a qualified lead. Call at the end of the flow once you have first name, mobile number, city, and preferred slot.",
+          "Book a TEST DRIVE for a qualified lead (user wants to drive the car). Call at the end of the flow once you have first name, mobile number, city, and preferred slot.",
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -181,9 +181,34 @@ const GEMINI_NAV_TOOLS: Tool[] = [
         },
       },
       {
+        name: "book_showroom_visit",
+        description:
+          "Schedule a SHOWROOM VISIT (user wants to come see the cars in person, not test-drive). Call after collecting first name, phone, city, and preferred slot.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            slug: { type: Type.STRING },
+            firstName: { type: Type.STRING },
+            phone: { type: Type.STRING },
+            city: { type: Type.STRING },
+            preferredSlot: { type: Type.STRING },
+          },
+          required: ["firstName", "phone"],
+        },
+      },
+      {
+        name: "find_showrooms",
+        description:
+          "List nearby showrooms / dealers. CALL THIS whenever the user names a city ('I'm in Riyadh', 'Casablanca', 'Jeddah') or asks where to visit / where the dealer is. Renders a card list with addresses, phones, hours. After calling, briefly summarize the result.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: { city: { type: Type.STRING } },
+        },
+      },
+      {
         name: "end_call",
         description:
-          "End the conversation. Call this IMMEDIATELY after your farewell phrase when: (1) a booking is confirmed, (2) the user says goodbye / thanks / bye, (3) the user clearly refuses to continue. Never keep the session open after saying goodbye.",
+          "End the conversation. Call this IMMEDIATELY after your farewell phrase when: (1) a booking is confirmed, (2) the user EXPLICITLY says goodbye in any language ('bye', 'au revoir', 'مع السلامة', 'بسلامة'), or (3) the user clearly refuses to continue twice. DO NOT call end_call on a bare 'thanks' or 'merci' — the user is just being polite, keep going.",
         parameters: { type: Type.OBJECT, properties: {} },
       },
     ],
@@ -202,7 +227,9 @@ const ANTHROPIC_NAV_TOOLS: Anthropic.Messages.Tool[] = [
   { name: "show_model_image", description: "Display a photo of a specific model inline in the chat.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, caption: { type: "string" as const } }, required: ["slug"] } },
   { name: "open_brand_page", description: "Open the official brand-site page for a model in a new browser tab.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const } }, required: ["slug"] } },
   { name: "book_test_drive", description: "Book a test drive once you have firstName + phone + city + slot.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["slug", "firstName", "phone"] } },
-  { name: "end_call", description: "End the conversation right after a farewell phrase. Never keep the session open after saying goodbye.", input_schema: { type: "object" as const, properties: {}, required: [] } },
+  { name: "book_showroom_visit", description: "Schedule a showroom visit (user wants to see cars in person, not drive).", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["firstName", "phone"] } },
+  { name: "find_showrooms", description: "List nearby showrooms when the user names a city or asks where to visit. Renders cards with addresses + phones.", input_schema: { type: "object" as const, properties: { city: { type: "string" as const } }, required: [] } },
+  { name: "end_call", description: "End the conversation right after a farewell phrase. DO NOT call on a bare 'thanks' — only on explicit goodbye phrases.", input_schema: { type: "object" as const, properties: {}, required: [] } },
 ];
 
 /* ─────────────────────────── System prompt build ─────────────────────────── */

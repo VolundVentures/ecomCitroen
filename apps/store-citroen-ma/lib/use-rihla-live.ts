@@ -118,7 +118,7 @@ const LIVE_TOOLS = [
       },
       {
         name: "book_test_drive",
-        description: "Book a test drive for a qualified lead. Call at the end of the flow after collecting first name, mobile number, city, and preferred time slot.",
+        description: "Book a TEST DRIVE for a qualified lead. Use when the user wants to drive the car. Call at the end of the flow after collecting first name, mobile number, city, and preferred time slot.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -129,6 +129,31 @@ const LIVE_TOOLS = [
             preferredSlot: { type: "STRING" },
           },
           required: ["slug", "firstName", "phone"],
+        },
+      },
+      {
+        name: "book_showroom_visit",
+        description: "Schedule a SHOWROOM VISIT (the user wants to come see the cars in person, not test-drive). Call after collecting first name, phone, city, and preferred slot.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            slug: { type: "STRING" },
+            firstName: { type: "STRING" },
+            phone: { type: "STRING" },
+            city: { type: "STRING" },
+            preferredSlot: { type: "STRING" },
+          },
+          required: ["firstName", "phone"],
+        },
+      },
+      {
+        name: "find_showrooms",
+        description: "List nearby showrooms / dealers. CALL THIS whenever the user names a city ('I'm in Riyadh', 'Casablanca', 'Jeddah') or asks where to find the cars / book a visit / find a service centre. Renders a card list with names, addresses, phones, hours. After calling, briefly summarize ('I found 3 in Riyadh — would you like to visit one?').",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            city: { type: "STRING", description: "City name as the user said it. Empty/undefined to list all showrooms." },
+          },
         },
       },
       {
@@ -429,49 +454,45 @@ export function useRihlaLive(
 
     updateState("connecting");
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+
+    // Kick off prompt + voice-session fetches in PARALLEL with the WS open
+    // and with mic permission. Previously these were sequential inside
+    // ws.onopen, costing ~2-4s before the agent could hear the user.
+    const promptParams = new URLSearchParams({
+      locale,
+      voice: "1",
+      ...(brandSlug ? { brand: brandSlug } : {}),
+    });
+    const promptPromise = fetch(`/api/rihla/system-prompt?${promptParams}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null) as Promise<{ systemPrompt: string; voiceName?: string; locale?: string } | null>;
+
+    const voiceStartPromise = brandSlug
+      ? fetch("/api/rihla/voice/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brandSlug, locale }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null) as Promise<{ id?: string } | null>
+      : Promise.resolve(null);
+
+    // Request mic permission and warm the audio context immediately.
+    // (The processor sends nothing until the WS is open — see startMic.)
     const ws = new WebSocket(url);
     wsRef.current = ws;
+    const micPromise = startMic(ws).catch((err) => {
+      console.warn("[rihla-live] mic start failed", err);
+    });
 
     ws.onopen = async () => {
-      // Fetch the assembled system prompt + greeting from the server. The server
-      // has access to Supabase (brand catalog + custom prompt body); the client
-      // doesn't.
-      let systemPrompt = "";
-      let resolvedVoice = voiceName;
-      let promptLocale = "fr-MA";
-      try {
-        const params = new URLSearchParams({
-          locale,
-          voice: "1",
-          ...(brandSlug ? { brand: brandSlug } : {}),
-        });
-        const res = await fetch(`/api/rihla/system-prompt?${params}`);
-        if (res.ok) {
-          const j = (await res.json()) as { systemPrompt: string; voiceName?: string; locale?: string };
-          systemPrompt = j.systemPrompt;
-          if (j.voiceName) resolvedVoice = j.voiceName;
-          if (j.locale) promptLocale = j.locale;
-        }
-      } catch (err) {
-        console.warn("[rihla-live] system-prompt fetch failed", err);
-      }
-
-      // Register a voice conversation row so transcripts + tool calls persist.
-      if (brandSlug) {
-        try {
-          const r = await fetch("/api/rihla/voice/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ brandSlug, locale: promptLocale }),
-          });
-          if (r.ok) {
-            const j = (await r.json()) as { id?: string };
-            if (j?.id) conversationIdRef.current = j.id;
-          }
-        } catch (err) {
-          console.warn("[rihla-live] voice/start failed", err);
-        }
-      }
+      const [promptResult, voiceResult] = await Promise.all([promptPromise, voiceStartPromise]);
+      const systemPrompt = promptResult?.systemPrompt ?? "";
+      const resolvedVoice = promptResult?.voiceName ?? voiceName;
+      if (voiceResult?.id) conversationIdRef.current = voiceResult.id;
+      // Wait for mic to be ready so the very first setup ack -> first audio
+      // chunks the user produces aren't dropped.
+      await micPromise;
 
       ws.send(
         JSON.stringify({
@@ -491,8 +512,6 @@ export function useRihlaLive(
           },
         })
       );
-
-      startMic(ws);
     };
 
     ws.onmessage = async (e) => {

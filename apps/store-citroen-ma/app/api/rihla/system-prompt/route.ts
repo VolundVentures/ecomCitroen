@@ -32,13 +32,15 @@ function mapLocale(l: string | null, market: string): Locale {
   return "fr-MA";
 }
 
+// Short greetings keep the call interactive — the model finishes speaking in
+// ~2s instead of ~5s, so the user can talk back faster.
 const OPENING_BY_LOCALE: Record<Locale, (brandName: string, agentName: string) => string> = {
-  "fr-MA": (b, a) => `Bonjour ! Je suis ${a}, conseillère ${b}. Vous cherchez une voiture pour la ville, la famille, ou un usage précis ?`,
-  "darija-MA": (b, a) => `مرحبا بيك ! أنا ${a} من ${b}. كتقلب على طوموبيل للمدينة، للعائلة، ولا لاستعمال معين ؟`,
-  "ar-MA": (b, a) => `أهلاً وسهلاً ! أنا ${a}، مستشارتكم في ${b}. هل تبحثون عن سيارة للمدينة، للعائلة، أم لاستخدام محدد ؟`,
-  "en-MA": (b, a) => `Hello! I'm ${a} from ${b}. Are you looking for a car for the city, for the family, or a specific use?`,
-  "ar-SA": (b, a) => `أهلاً وسهلاً ! أنا ${a} من ${b}. هل تبحثون عن سيارة للمدينة، للعائلة، أم لاستخدام محدد ؟`,
-  "en-SA": (b, a) => `Hello! I'm ${a} from ${b}. Are you looking for a car for the city, for the family, or a specific use?`,
+  "fr-MA": (b, a) => `Bonjour, ${a} de ${b}. Comment puis-je vous aider ?`,
+  "darija-MA": (b, a) => `مرحبا، أنا ${a} من ${b}. كيفاش نقدر نعاونك ؟`,
+  "ar-MA": (b, a) => `أهلاً، أنا ${a} من ${b}. كيف يمكنني مساعدتكم ؟`,
+  "en-MA": (b, a) => `Hi, ${a} here from ${b}. How can I help?`,
+  "ar-SA": (b, a) => `أهلاً، أنا ${a} من ${b}. كيف يمكنني مساعدتكم ؟`,
+  "en-SA": (b, a) => `Hi, ${a} here from ${b}. How can I help?`,
 };
 
 const LANG_REMINDER: Record<Locale, string> = {

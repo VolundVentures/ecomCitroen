@@ -14,17 +14,21 @@ import {
   dispatchRihlaTool,
   onEndCall,
   onImageCard,
+  onShowrooms,
   type ImageCardPayload,
+  type ShowroomsPayload,
   type WidgetBrand,
 } from "@/lib/rihla-actions";
 import { useRihlaLive, type LiveToolCall } from "@/lib/use-rihla-live";
 import { LanguagePicker, getLangConfig, type VoiceLang } from "@/components/rihla/LanguagePicker";
 import { ModePicker, type Mode } from "@/components/rihla/ModePicker";
 import { CallView } from "@/components/rihla/CallView";
+import { ShowroomCards } from "@/components/rihla/ShowroomCards";
 
 type Msg =
   | { kind: "text"; role: "user" | "assistant"; text: string; tools?: Array<{ name: string; input: Record<string, unknown> }> }
-  | { kind: "image_card"; role: "assistant"; payload: ImageCardPayload };
+  | { kind: "image_card"; role: "assistant"; payload: ImageCardPayload }
+  | { kind: "showrooms"; role: "assistant"; payload: ShowroomsPayload };
 
 type StreamEvent =
   | { type: "text"; text: string }
@@ -103,9 +107,20 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     return () => { clearTimeout(t); clearTimeout(t2); };
   }, [embedded, open]);
 
+  // Most-recent image-card payload (used by the CallView so the customer can
+  // SEE the car the agent is talking about during a voice call).
+  const [callImage, setCallImage] = useState<ImageCardPayload | null>(null);
+
   useEffect(() => {
     return onImageCard((payload) => {
       setMessages((m) => [...m, { kind: "image_card", role: "assistant", payload }]);
+      setCallImage(payload);
+    });
+  }, []);
+
+  useEffect(() => {
+    return onShowrooms((payload) => {
+      setMessages((m) => [...m, { kind: "showrooms", role: "assistant", payload }]);
     });
   }, []);
 
@@ -344,6 +359,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
       scrollRef={scrollRef}
       accent={accent}
       onClose={embedded ? null : () => setOpen(false)}
+      callImage={callImage}
     />
   );
 
@@ -477,6 +493,7 @@ type PanelProps = {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   accent: string;
   onClose: (() => void) | null;
+  callImage: ImageCardPayload | null;
 };
 
 function BubblePanel(p: PanelProps) {
@@ -498,6 +515,7 @@ function BubblePanel(p: PanelProps) {
         accent={p.accent}
         brandName={p.brand.name}
         locale={p.voiceLang}
+        currentImage={p.callImage}
         onSendText={(t) => {
           // Send to Gemini Live so Rihla hears it, AND surface it in the
           // session's transcript bus so it persists as a user_text message.
@@ -540,10 +558,21 @@ function BubblePanel(p: PanelProps) {
           <motion.div key="chat" className="flex flex-1 flex-col overflow-hidden bg-[#fafafa]">
             <div ref={p.scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
               <div className="space-y-3">
-                {p.messages.map((m, i) =>
-                  m.kind === "image_card" ? (
-                    <ImageCardMsg key={i} payload={m.payload} accent={p.accent} />
-                  ) : (
+                {p.messages.map((m, i) => {
+                  if (m.kind === "image_card") {
+                    return <ImageCardMsg key={i} payload={m.payload} accent={p.accent} />;
+                  }
+                  if (m.kind === "showrooms") {
+                    return (
+                      <ShowroomCards
+                        key={i}
+                        items={m.payload.items}
+                        city={m.payload.city}
+                        accent={p.accent}
+                      />
+                    );
+                  }
+                  return (
                     <TextMsg
                       key={i}
                       m={m}
@@ -551,8 +580,8 @@ function BubblePanel(p: PanelProps) {
                       accent={p.accent}
                       brandName={p.brand.name}
                     />
-                  )
-                )}
+                  );
+                })}
               </div>
             </div>
 
@@ -713,6 +742,31 @@ function teaserText(lang: VoiceLang | null, brandFirstWord: string): string {
   return `Bonjour ! Besoin d'aide pour choisir votre ${brandFirstWord} ?`;
 }
 
+/** Render text, wrapping phone-like digit runs in <bdi dir="ltr"> so numbers
+ *  don't reverse inside Arabic text. Splits on runs of 4+ digits (with
+ *  optional spaces / dashes / +) which is enough to catch phones without
+ *  triggering on stray years. */
+function renderWithLtrDigits(text: string): React.ReactNode {
+  // Match runs that look like a phone: optional +, then 4+ digits with
+  // spaces / hyphens between, total of at least 7 digits.
+  const re = /(\+?\d[\d\s-]{6,}\d)/g;
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <bdi key={`bdi-${key++}`} dir="ltr" className="font-mono tabular-nums">
+        {m[0]}
+      </bdi>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length === 0 ? text : parts;
+}
+
 function TextMsg({
   m,
   streaming,
@@ -737,7 +791,7 @@ function TextMsg({
         </div>
         <div className="min-w-0 max-w-[82%]">
           <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[13px] leading-relaxed text-[#0c0c10] shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_0_1px_rgba(0,0,0,0.04)]">
-            {m.text || (streaming ? <TypingDots /> : "")}
+            {m.text ? renderWithLtrDigits(m.text) : streaming ? <TypingDots /> : ""}
           </div>
           {m.tools && m.tools.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1 ps-1">
@@ -769,7 +823,7 @@ function TextMsg({
         className="max-w-[82%] rounded-2xl rounded-br-md px-3.5 py-2.5 text-[13px] leading-relaxed text-white shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
         style={{ background: accent }}
       >
-        {m.text}
+        {renderWithLtrDigits(m.text)}
       </div>
     </motion.div>
   );

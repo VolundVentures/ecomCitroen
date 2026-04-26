@@ -3,8 +3,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { PhoneOff, Mic, MicOff, Keyboard, SendHorizonal, X } from "lucide-react";
+import { PhoneOff, Mic, MicOff, Keyboard, SendHorizonal, X, ExternalLink } from "lucide-react";
 import type { LiveState } from "@/lib/use-rihla-live";
+import type { ImageCardPayload } from "@/lib/rihla-actions";
 
 type CallViewProps = {
   state: LiveState;
@@ -16,6 +17,8 @@ type CallViewProps = {
   onSendText?: (text: string) => void;
   /** Locale for the typing affordance label. */
   locale?: "fr" | "ar" | "en" | "darija" | null;
+  /** When the agent calls show_model_image during a voice call, render the image overlay. */
+  currentImage?: ImageCardPayload | null;
 };
 
 const TYPE_LABELS: Record<NonNullable<CallViewProps["locale"]>, { tap: string; placeholder: string; sent: string }> = {
@@ -33,6 +36,7 @@ export function CallView({
   brandName = "Rihla",
   onSendText,
   locale,
+  currentImage,
 }: CallViewProps) {
   const minutes = Math.floor(duration / 60);
   const seconds = duration % 60;
@@ -200,6 +204,52 @@ export function CallView({
           )}
         </AnimatePresence>
       </div>
+
+      {/* Inline car image — appears when the agent fires show_model_image
+          during a voice call. So the customer SEES the car the agent is
+          talking about. */}
+      <AnimatePresence>
+        {currentImage?.imageUrl && (
+          <motion.div
+            key={currentImage.imageUrl}
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+            transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
+            className="relative z-10 -mt-2 w-[min(360px,calc(100vw-48px))] overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_18px_42px_-12px_rgba(0,0,0,0.55)]"
+            style={{ boxShadow: `0 18px 42px -12px ${accent}55, 0 0 0 1px rgba(255,255,255,0.08)` }}
+          >
+            <div className="relative aspect-[16/10] w-full overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={currentImage.imageUrl}
+                alt={currentImage.caption ?? ""}
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+              {currentImage.caption && (
+                <div className="absolute inset-x-0 bottom-0 px-3.5 pb-2 pt-6">
+                  <div className="text-[12.5px] font-semibold text-white drop-shadow-sm">
+                    {currentImage.caption}
+                  </div>
+                </div>
+              )}
+            </div>
+            {currentImage.ctaUrl && (
+              <a
+                href={currentImage.ctaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between px-3.5 py-2 text-[12px] font-medium transition hover:bg-white/[0.04]"
+                style={{ color: accent }}
+              >
+                <span>{currentImage.ctaLabel ?? "View on official site"}</span>
+                <ExternalLink size={12} strokeWidth={2} />
+              </a>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Bottom: controls */}
       <div className="relative flex flex-col items-center gap-3">
