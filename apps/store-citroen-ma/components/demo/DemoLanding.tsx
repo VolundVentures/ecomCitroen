@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -14,67 +15,88 @@ import {
   Zap,
 } from "lucide-react";
 import type { FullBrandContext } from "@/lib/brand-context";
+import { DEMO_I18N, type DemoLang, type DemoStrings, pickDemoLang } from "@/components/demo/demo-i18n";
 
 type Props = {
   ctx: FullBrandContext;
   accent: string;
 };
 
+const FLAGS: Record<DemoLang, string> = { en: "🇬🇧", fr: "🇫🇷", ar: "🇸🇦" };
+const LANG_LABELS: Record<DemoLang, string> = { en: "English", fr: "Français", ar: "العربية" };
+
 export function DemoLanding({ ctx, accent }: Props) {
   const { brand, models } = ctx;
+  const initialLang = pickDemoLang(brand.locales);
+  const [lang, setLang] = useState<DemoLang>(initialLang);
+  const t = DEMO_I18N[lang];
+  const isRtl = lang === "ar";
   const hero = models[0];
   const featured = models.slice(0, 6);
 
-  return (
-    <div className="relative min-h-screen bg-[#0a0a0c] text-white">
-      {/* Top nav bar */}
-      <Nav brand={brand} accent={accent} />
+  // Show whichever languages the brand supports.
+  const availableLangs: DemoLang[] = (() => {
+    const set = new Set<DemoLang>();
+    for (const loc of brand.locales) {
+      if (loc.startsWith("ar") || loc === "darija-MA") set.add("ar");
+      else if (loc.startsWith("en")) set.add("en");
+      else if (loc.startsWith("fr")) set.add("fr");
+    }
+    if (set.size === 0) set.add("fr");
+    return ["en", "fr", "ar"].filter((l) => set.has(l as DemoLang)) as DemoLang[];
+  })();
 
-      {/* Hero */}
+  return (
+    <div className="relative min-h-screen bg-[#0a0a0c] text-white" dir={isRtl ? "rtl" : "ltr"}>
+      <Nav brand={brand} accent={accent} t={t} lang={lang} setLang={setLang} availableLangs={availableLangs} />
+
       <section className="relative overflow-hidden">
         <BackgroundOrb accent={accent} />
 
         <div className="relative mx-auto max-w-7xl px-6 pt-12 pb-24 lg:pt-20 lg:pb-32">
           <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
-            {/* Copy column */}
             <div>
               <motion.div
+                key={`badge-${lang}`}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6 }}
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.22em] text-white/70 backdrop-blur"
               >
                 <span className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
-                AI Sales Concierge · Powered by Rihla
+                {t.badge}
               </motion.div>
 
               <motion.h1
+                key={`h1-${lang}`}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.1 }}
                 className="mt-6 text-balance text-4xl font-semibold leading-[1.04] tracking-[-0.02em] sm:text-5xl lg:text-6xl"
               >
-                Discutez, configurez,
+                {t.title1}
                 <br />
-                <span className="bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(135deg, ${accent} 0%, #ffffff 100%)` }}>
-                  réservez votre {brand.name.split(" ")[0]}
+                <span
+                  className="bg-clip-text text-transparent"
+                  style={{ backgroundImage: `linear-gradient(135deg, ${accent} 0%, #ffffff 100%)` }}
+                >
+                  {t.title2} {brand.name.split(" ")[0]}
                 </span>
-                <br /> en quelques minutes.
+                <br /> {t.title3}
               </motion.h1>
 
               <motion.p
+                key={`sub-${lang}`}
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
                 className="mt-6 max-w-[520px] text-[15px] leading-relaxed text-white/65"
               >
-                Rihla, votre conseillère IA, comprend vos besoins, vous recommande
-                le bon modèle, simule le financement et organise un essai chez le
-                concessionnaire le plus proche — par chat ou en appel vocal,
-                disponible 24/7 dans la langue qui vous convient.
+                {t.subtitle}
               </motion.p>
 
               <motion.div
+                key={`cta-${lang}`}
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.32 }}
@@ -82,12 +104,12 @@ export function DemoLanding({ ctx, accent }: Props) {
               >
                 <CTAButton accent={accent} primary>
                   <Sparkles size={15} strokeWidth={2} className="opacity-90" />
-                  Démarrer la conversation
-                  <ArrowDownRight size={15} strokeWidth={2.2} className="opacity-90" />
+                  {t.ctaPrimary}
+                  <ArrowDownRight size={15} strokeWidth={2.2} className="opacity-90 rtl:rotate-90" />
                 </CTAButton>
                 <CTAButton accent={accent}>
                   <Mic2 size={15} strokeWidth={2} />
-                  Ou parlez à Rihla
+                  {t.ctaVoice}
                 </CTAButton>
               </motion.div>
 
@@ -97,16 +119,12 @@ export function DemoLanding({ ctx, accent }: Props) {
                 transition={{ duration: 0.6, delay: 0.44 }}
                 className="mt-12 grid max-w-[560px] grid-cols-3 gap-6 border-t border-white/5 pt-8"
               >
-                <Stat label="Concessionnaires" value="42+" />
-                <Stat label="Réponse" value="< 2s" />
-                <Stat
-                  label={brand.market === "SA" ? "Lang." : "Langues"}
-                  value={brand.locales.length.toString()}
-                />
+                <Stat label={t.statDealers} value="42+" />
+                <Stat label={t.statResponse} value="< 2s" />
+                <Stat label={t.statLanguages} value={brand.locales.length.toString()} />
               </motion.div>
             </div>
 
-            {/* Image column */}
             {hero && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.96 }}
@@ -129,16 +147,15 @@ export function DemoLanding({ ctx, accent }: Props) {
                     }}
                   />
 
-                  {/* Bottom info pill */}
                   <div className="absolute inset-x-5 bottom-5 flex items-end justify-between gap-3 text-white">
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-white/70">Featured model</div>
+                      <div className="text-[10px] uppercase tracking-[0.22em] text-white/70">{t.modelFeaturedLabel}</div>
                       <div className="mt-1 text-2xl font-semibold leading-tight">{hero.name}</div>
                       {hero.tagline && <div className="mt-1 max-w-[280px] text-[12px] text-white/70">{hero.tagline}</div>}
                     </div>
                     {hero.price_from && hero.price_from > 0 && (
                       <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-end backdrop-blur">
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/55">À partir de</div>
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/55">{t.modelFromLabel}</div>
                         <div className="text-sm font-semibold tabular-nums">
                           {hero.price_from.toLocaleString()} {hero.currency}
                         </div>
@@ -147,7 +164,6 @@ export function DemoLanding({ ctx, accent }: Props) {
                   </div>
                 </div>
 
-                {/* Floating "talk to Rihla" hint card — desktop only */}
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -162,12 +178,12 @@ export function DemoLanding({ ctx, accent }: Props) {
                       <div className="text-[12px] font-semibold">Rihla</div>
                       <div className="flex items-center gap-1 text-[10px] text-white/55">
                         <span className="h-1 w-1 rounded-full bg-emerald-400" />
-                        En ligne
+                        {lang === "en" ? "Online" : lang === "ar" ? "متصلة" : "En ligne"}
                       </div>
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl bg-white/5 px-3 py-2 text-[12px] leading-snug text-white/80">
-                    « Bonjour ! Pour quel usage cherchez-vous votre voiture ? »
+                    {t.speech}
                   </div>
                 </motion.div>
               </motion.div>
@@ -176,65 +192,33 @@ export function DemoLanding({ ctx, accent }: Props) {
         </div>
       </section>
 
-      {/* Why Rihla — feature strip */}
       <section className="relative border-y border-white/5 bg-white/[0.02]">
         <div className="mx-auto max-w-7xl px-6 py-16">
           <div className="mx-auto max-w-2xl text-center">
-            <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">Why Rihla</div>
+            <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">{t.whyTitle}</div>
             <h2 className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.01em] sm:text-4xl">
-              Une expérience qui transforme la curiosité en lead qualifié.
+              {t.whySub}
             </h2>
           </div>
 
           <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Feature
-              accent={accent}
-              icon={<MessageSquare size={18} strokeWidth={1.7} />}
-              title="Chat ou voix"
-              text="Le client choisit son canal — message instantané ou appel vocal naturel — et Rihla s'adapte."
-            />
-            <Feature
-              accent={accent}
-              icon={<Globe size={18} strokeWidth={1.7} />}
-              title="Multilingue natif"
-              text="Français, arabe, darija, anglais — Rihla répond dans la langue du client, sans accent étranger."
-            />
-            <Feature
-              accent={accent}
-              icon={<Zap size={18} strokeWidth={1.7} />}
-              title="Conversion en 6 tours"
-              text="De l'accueil au rendez-vous d'essai en 3 à 6 échanges. Lead qualifié envoyé au concessionnaire."
-            />
-            <Feature
-              accent={accent}
-              icon={<Sparkles size={18} strokeWidth={1.7} />}
-              title="Recommandation IA"
-              text="Comprend usage, budget, taille de famille, et propose le bon modèle — pas un catalogue."
-            />
-            <Feature
-              accent={accent}
-              icon={<Star size={18} strokeWidth={1.7} />}
-              title="Configurateur intégré"
-              text="Couleurs, finitions, options — Rihla configure le véhicule pendant la conversation."
-            />
-            <Feature
-              accent={accent}
-              icon={<Shield size={18} strokeWidth={1.7} />}
-              title="Conforme & sécurisé"
-              text="Données stockées au Maroc / KSA. Export CRM. RGPD-ready. CMI-ready pour l'acompte."
-            />
+            <Feature accent={accent} icon={<MessageSquare size={18} strokeWidth={1.7} />} title={t.feature1Title} text={t.feature1} />
+            <Feature accent={accent} icon={<Globe size={18} strokeWidth={1.7} />} title={t.feature2Title} text={t.feature2} />
+            <Feature accent={accent} icon={<Zap size={18} strokeWidth={1.7} />} title={t.feature3Title} text={t.feature3} />
+            <Feature accent={accent} icon={<Sparkles size={18} strokeWidth={1.7} />} title={t.feature4Title} text={t.feature4} />
+            <Feature accent={accent} icon={<Star size={18} strokeWidth={1.7} />} title={t.feature5Title} text={t.feature5} />
+            <Feature accent={accent} icon={<Shield size={18} strokeWidth={1.7} />} title={t.feature6Title} text={t.feature6} />
           </div>
         </div>
       </section>
 
-      {/* Models showcase */}
       <section className="relative">
         <div className="mx-auto max-w-7xl px-6 py-20">
           <div className="flex items-end justify-between gap-6">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">La gamme {brand.name.split(" ")[0]}</div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">{t.rangeEyebrow(models.length)}</div>
               <h2 className="mt-3 text-3xl font-semibold leading-tight tracking-[-0.01em] sm:text-4xl">
-                {models.length} modèles à découvrir avec Rihla.
+                {t.rangeTitle(models.length, brand.name.split(" ")[0] ?? brand.name)}
               </h2>
             </div>
             <a
@@ -243,8 +227,8 @@ export function DemoLanding({ ctx, accent }: Props) {
               rel="noopener noreferrer"
               className="hidden items-center gap-1.5 rounded-full border border-white/10 px-4 py-2 text-[12px] text-white/70 transition hover:border-white/30 hover:text-white sm:inline-flex"
             >
-              Voir le site officiel
-              <ArrowRight size={13} strokeWidth={2} />
+              {t.rangeCta}
+              <ArrowRight size={13} strokeWidth={2} className="rtl:rotate-180" />
             </a>
           </div>
 
@@ -279,19 +263,17 @@ export function DemoLanding({ ctx, accent }: Props) {
                     </div>
                     {m.price_from && m.price_from > 0 && (
                       <div className="text-end">
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/40">À partir</div>
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/40">{t.modelFromLabel}</div>
                         <div className="text-[13px] font-semibold tabular-nums">
                           {m.price_from.toLocaleString()} {m.currency}
                         </div>
                       </div>
                     )}
                   </div>
-                  {m.tagline && (
-                    <div className="line-clamp-2 text-[12px] text-white/55">{m.tagline}</div>
-                  )}
+                  {m.tagline && <div className="line-clamp-2 text-[12px] text-white/55">{m.tagline}</div>}
                   <div className="mt-auto flex items-center gap-1.5 text-[11px] font-medium" style={{ color: accent }}>
-                    <span>Discuter de ce modèle</span>
-                    <ArrowRight size={12} strokeWidth={2} className="transition group-hover:translate-x-1" />
+                    <span>{t.modelDiscuss}</span>
+                    <ArrowRight size={12} strokeWidth={2} className="transition group-hover:translate-x-1 rtl:rotate-180" />
                   </div>
                 </div>
               </motion.a>
@@ -300,7 +282,6 @@ export function DemoLanding({ ctx, accent }: Props) {
         </div>
       </section>
 
-      {/* Final CTA banner */}
       <section className="relative overflow-hidden">
         <div className="mx-auto max-w-7xl px-6 pb-24 pt-4">
           <div
@@ -311,17 +292,14 @@ export function DemoLanding({ ctx, accent }: Props) {
             }}
           >
             <div className="relative max-w-xl">
-              <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">Prêt à essayer ?</div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-white/40">{t.finalEyebrow}</div>
               <h3 className="mt-3 text-3xl font-semibold leading-tight tracking-[-0.01em] sm:text-4xl">
-                Discutez avec Rihla maintenant.
+                {t.finalTitle}
               </h3>
-              <p className="mt-3 text-[15px] text-white/65">
-                Cliquez sur le bouton flottant en bas à droite. Choisissez votre langue,
-                votre canal — Rihla fait le reste.
-              </p>
+              <p className="mt-3 text-[15px] text-white/65">{t.finalSub}</p>
               <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[12px] text-white/75 backdrop-blur">
                 <ArrowDownRight size={14} strokeWidth={2} className="opacity-80" />
-                <span>Cliquez sur l'avatar Rihla en bas à droite</span>
+                <span>{t.finalHint}</span>
               </div>
             </div>
           </div>
@@ -342,11 +320,24 @@ export function DemoLanding({ ctx, accent }: Props) {
   );
 }
 
-// ─── Pieces ────────────────────────────────────────────────────────────────
-
-function Nav({ brand, accent }: { brand: FullBrandContext["brand"]; accent: string }) {
+function Nav({
+  brand,
+  accent,
+  t,
+  lang,
+  setLang,
+  availableLangs,
+}: {
+  brand: FullBrandContext["brand"];
+  accent: string;
+  t: DemoStrings;
+  lang: DemoLang;
+  setLang: (l: DemoLang) => void;
+  availableLangs: DemoLang[];
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a0c]/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5">
         <div className="flex items-center gap-3">
           {brand.logo_url && (
@@ -356,26 +347,55 @@ function Nav({ brand, accent }: { brand: FullBrandContext["brand"]; accent: stri
           )}
           <div className="leading-tight">
             <div className="text-[13px] font-semibold tracking-tight">{brand.name}</div>
-            <div className="text-[9px] uppercase tracking-[0.22em] text-white/40">
-              Stellantis Demo · Powered by Rihla
-            </div>
+            <div className="text-[9px] uppercase tracking-[0.22em] text-white/40">{t.navTagline}</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span
-            className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-white/60 sm:inline-flex"
-            style={{ borderColor: `${accent}40` }}
-          >
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
-            {brand.locales.join(" · ")}
-          </span>
+          {/* Language toggle */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/80 transition hover:border-white/30 hover:bg-white/[0.07]"
+            >
+              <span className="text-base leading-none">{FLAGS[lang]}</span>
+              <span>{LANG_LABELS[lang]}</span>
+              <Globe size={11} strokeWidth={1.7} className="opacity-60" />
+            </button>
+            <AnimatePresence>
+              {open && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute end-0 z-30 mt-1 overflow-hidden rounded-xl border border-white/10 bg-[#101013] shadow-[0_18px_42px_-12px_rgba(0,0,0,0.6)]"
+                >
+                  {availableLangs.map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => { setLang(l); setOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-[12px] transition hover:bg-white/[0.06] ${
+                        l === lang ? "bg-white/[0.04] text-white" : "text-white/70"
+                      }`}
+                    >
+                      <span className="text-base leading-none">{FLAGS[l]}</span>
+                      <span>{LANG_LABELS[l]}</span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           <a
             href={brand.homepage_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-full border border-white/10 px-3.5 py-1.5 text-[11px] text-white/70 transition hover:border-white/30 hover:text-white"
+            className="hidden rounded-full border border-white/10 px-3.5 py-1.5 text-[11px] text-white/70 transition hover:border-white/30 hover:text-white sm:inline-flex"
+            style={{ borderColor: `${accent}33` }}
           >
-            Site officiel ↗
+            {t.navOfficial} ↗
           </a>
         </div>
       </div>
@@ -396,7 +416,6 @@ function BackgroundOrb({ accent }: { accent: string }) {
         className="pointer-events-none absolute top-32 left-[-10%] h-[420px] w-[420px] rounded-full blur-[140px]"
         style={{ background: "rgba(255,255,255,0.05)" }}
       />
-      {/* Subtle grid */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-[0.04]"
@@ -437,9 +456,7 @@ function CTAButton({
         whileTap={{ scale: 0.97 }}
         whileHover={{ y: -1 }}
         className="group inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-white shadow-[0_12px_28px_-8px_rgba(0,0,0,0.4)] transition"
-        style={{
-          background: `linear-gradient(135deg, ${accent} 0%, ${accent}dd 100%)`,
-        }}
+        style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accent}dd 100%)` }}
       >
         {children}
       </motion.button>

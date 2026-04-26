@@ -90,21 +90,24 @@ You speak clean, neutral, warm English. Professional but friendly.
 
 function modelCatalog(brand: BrandContext): string {
   if (brand.models.length === 0) {
-    return "═══ GAMME ═══\n\n(catalogue à charger depuis la base — pas de modèles configurés.)";
+    return "═══ CATALOG ═══\n\n(no models configured for this brand yet.)";
   }
   const lines = brand.models.map((m) => {
-    const price = m.priceFrom != null ? ` — à partir de ${m.priceFrom.toLocaleString()} ${m.currency ?? brand.defaultCurrency}` : "";
-    const meta = [m.bodyType, m.fuel, m.seats ? `${m.seats} places` : null].filter(Boolean).join(" · ");
+    const price = m.priceFrom != null ? ` — from ${m.priceFrom.toLocaleString()} ${m.currency ?? brand.defaultCurrency}` : "";
+    const meta = [m.bodyType, m.fuel, m.seats ? `${m.seats} seats` : null].filter(Boolean).join(" · ");
     const features = (m.keyFeatures ?? []).slice(0, 3).join(" · ");
     return `${m.name} (slug: ${m.slug})${price}\n  ${meta}\n  ${features}`;
   });
-  return `═══ GAMME ${brand.brandName.toUpperCase()} ═══\n\n${lines.join("\n\n")}`;
+  return `═══ CATALOG — ${brand.brandName.toUpperCase()} ═══\n\n(Use ONLY these models. Never invent. Pass the slug to tools.)\n\n${lines.join("\n\n")}`;
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
   const { locale, brand, dealerCityHint, returningUser, sessionSummary, customBody } = input;
 
-  const head = `Tu es ${brand.agentName}, conseillère commerciale senior chez ${brand.brandName}.`;
+  // Persona description in English so the prompt instructions never leak into
+  // the customer-facing language. The LANGUAGE block below tells the model
+  // what to actually say to users.
+  const head = `You are ${brand.agentName}, a senior sales advisor for ${brand.brandName}. Always respond to the customer in the language defined by the LANGUAGE block below.`;
 
   // If the admin has provided a custom prompt body, render it verbatim with
   // brand-aware language + catalog blocks appended for safety.

@@ -161,18 +161,24 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
   }, [live.isConnected]);
 
-  // end_call handling — for voice mode, drop back to mode picker; for chat, close panel.
+  // end_call handling — works for BOTH voice and chat. For voice, the hook
+  // already starts a soft disconnect (lets the farewell audio play), then we
+  // navigate back to the mode picker so the call view doesn't stay frozen.
   useEffect(() => {
     return onEndCall(() => {
-      if (live.isConnected) return;
       if (mode === "voice") {
-        setMode(null);
-        writeStored(brand.slug, voiceLang, null);
+        // Audio finishes within ~6s (hard backstop in the hook). Reset mode
+        // a touch later so the farewell line plays out cleanly.
+        setTimeout(() => {
+          setMode(null);
+          writeStored(brand.slug, voiceLang, null);
+          if (live.isConnected) live.disconnect();
+        }, 4500);
         return;
       }
       if (!embedded) setTimeout(() => setOpen(false), 2000);
     });
-  }, [live.isConnected, embedded, mode, brand.slug, voiceLang]);
+  }, [embedded, mode, brand.slug, voiceLang, live]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -371,7 +377,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
                   className="mb-2 hidden items-center gap-2 rounded-2xl bg-white px-4 py-3 text-start text-[12px] leading-snug text-[#0c0c10] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.25),0_0_0_1px_rgba(0,0,0,0.05)] sm:flex"
                 >
                   <Sparkles size={12} strokeWidth={2} style={{ color: accent }} />
-                  <span>Bonjour ! Besoin d'aide pour choisir votre {brand.name.split(" ")[0]} ?</span>
+                  <span>{teaserText(voiceLang, brand.name.split(" ")[0]!)}</span>
                   <X
                     size={12}
                     strokeWidth={2}
@@ -474,8 +480,16 @@ type PanelProps = {
 };
 
 function BubblePanel(p: PanelProps) {
-  // Voice mode / call view takes over completely.
-  if (p.live.isConnected || (p.stage === "chat" && p.mode === "voice")) {
+  // Voice mode / call view: only while the WS is actually live OR connecting.
+  // Once the hook disconnects (after end_call), we drop back to the picker so
+  // the panel never freezes on a dead call view.
+  const callActive =
+    p.mode === "voice" &&
+    (p.live.state === "connecting" ||
+      p.live.state === "connected" ||
+      p.live.state === "listening" ||
+      p.live.state === "speaking");
+  if (callActive) {
     return (
       <CallView
         state={p.live.state}
@@ -563,7 +577,7 @@ function BubblePanel(p: PanelProps) {
                   onClick={p.resetToMode}
                   className="inline-flex items-center gap-1 transition hover:text-black/60"
                 >
-                  <PhoneCall size={10} strokeWidth={2} /> Switch to voice
+                  <PhoneCall size={10} strokeWidth={2} /> {switchToVoiceLabel(p.voiceLang)}
                 </button>
               </div>
             </div>
@@ -627,7 +641,7 @@ function Header({
         <div className="text-[13px] font-semibold leading-tight">{isChat ? "Rihla" : brand.name}</div>
         <div className="flex items-center gap-1.5 text-[11px] opacity-85">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          <span>{isChat ? `Conseillère · ${brand.name}` : "En ligne"}</span>
+          <span>{isChat ? agentSubtitle(voiceLang, brand.name) : onlineLabel(voiceLang)}</span>
         </div>
       </div>
 
@@ -663,6 +677,30 @@ function inputPlaceholder(lang: VoiceLang | null): string {
   if (lang === "darija") return "كتب الرسالة ديالك هنا…";
   if (lang === "en") return "Type your message…";
   return "Écrivez votre message…";
+}
+
+function agentSubtitle(lang: VoiceLang | null, brand: string): string {
+  if (lang === "ar" || lang === "darija") return `مستشارة · ${brand}`;
+  if (lang === "en") return `Advisor · ${brand}`;
+  return `Conseillère · ${brand}`;
+}
+
+function onlineLabel(lang: VoiceLang | null): string {
+  if (lang === "ar" || lang === "darija") return "متصلة";
+  if (lang === "en") return "Online";
+  return "En ligne";
+}
+
+function switchToVoiceLabel(lang: VoiceLang | null): string {
+  if (lang === "ar" || lang === "darija") return "التحول للمكالمة";
+  if (lang === "en") return "Switch to voice";
+  return "Passer à la voix";
+}
+
+function teaserText(lang: VoiceLang | null, brandFirstWord: string): string {
+  if (lang === "ar" || lang === "darija") return `مرحبا ! تحتاج مساعدة لاختيار ${brandFirstWord} ؟`;
+  if (lang === "en") return `Hi! Need help picking your ${brandFirstWord}?`;
+  return `Bonjour ! Besoin d'aide pour choisir votre ${brandFirstWord} ?`;
 }
 
 function TextMsg({

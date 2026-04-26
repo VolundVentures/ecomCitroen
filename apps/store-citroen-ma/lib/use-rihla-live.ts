@@ -23,6 +23,8 @@ type GeminiMsg =
   | {
       serverContent?: {
         modelTurn?: { parts?: Array<{ inlineData?: { data: string; mimeType: string }; text?: string }> };
+        inputTranscription?: { text?: string; finished?: boolean };
+        outputTranscription?: { text?: string; finished?: boolean };
         turnComplete?: boolean;
       };
     }
@@ -131,7 +133,7 @@ const LIVE_TOOLS = [
       },
       {
         name: "end_call",
-        description: "END THE CALL. Call this IMMEDIATELY after your closing phrase when: (1) a booking is confirmed, (2) the user says goodbye / thanks / bye / يالاه / بسلامة, (3) the user clearly refuses to continue, or (4) the conversation has naturally ended. Never keep the call open after saying goodbye.",
+        description: "END THE CALL — call this IMMEDIATELY after your closing line whenever the user signals they're done. Triggers (any language, partial match): 'bye', 'goodbye', 'thanks', 'thank you', 'au revoir', 'merci', 'à bientôt', 'bonne journée', 'salut', 'شكرا', 'شكراً', 'بسلامة', 'في أمان الله', 'مع السلامة', 'يالله', 'يالاه', 'صافي', 'خلاص', 'تمام', 'تسلم', 'الله يعطيك العافية'. ALSO call after a successful book_test_drive + farewell. Never continue after a farewell — end_call is the only valid response.",
         parameters: { type: "OBJECT", properties: {} },
       },
     ],
@@ -158,6 +160,23 @@ export function useRihlaLive(
   const disconnectRef = useRef<(() => void) | null>(null);
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
+  // Voice persistence — server-issued conversation id, plus a buffer for the
+  // currently-streaming assistant turn so we POST it once when the turn ends.
+  const conversationIdRef = useRef<string | null>(null);
+  const assistantBufferRef = useRef<string>("");
+
+  const persistEvent = useCallback(async (payload: Record<string, unknown>) => {
+    if (!conversationIdRef.current) return;
+    try {
+      await fetch("/api/rihla/voice/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: conversationIdRef.current, ...payload }),
+      });
+    } catch {
+      // Best-effort; never break the call flow on persistence failure.
+    }
+  }, []);
 
   const updateState = useCallback((s: LiveState) => {
     setState(s);
@@ -239,9 +258,30 @@ export function useRihlaLive(
 
       if ("toolCall" in msg && msg.toolCall) {
         for (const fc of msg.toolCall.functionCalls) {
+          // Persist every tool call (incl. end_call, book_test_drive).
+          if (brandSlug) {
+            void persistEvent({
+              kind: "tool_call",
+              brandSlug,
+              name: fc.name,
+              input: fc.args ?? {},
+            });
+          }
           if (fc.name === "end_call") {
-            // Flag disconnect to happen after the current audio finishes playing.
+            // 1. Mark for disconnect when audio drains.
             shouldDisconnectRef.current = true;
+            // 2. Forward to caller so the UI can navigate (bubble switches off CallView).
+            try { callbacksRef.current.onToolCall({ name: fc.name, id: fc.id, args: fc.args }); }
+            catch { /* swallow */ }
+            // 3. Hard backstop: after 6s, force disconnect even if turnComplete never arrives
+            //    or the audio queue gets stuck. This is the safety net for the freeze the user hit.
+            window.setTimeout(() => {
+              if (shouldDisconnectRef.current) {
+                shouldDisconnectRef.current = false;
+                disconnectRef.current?.();
+              }
+            }, 6000);
+            // 4. Ack the tool so the model can emit one final farewell turn.
             wsRef.current?.send(
               JSON.stringify({
                 toolResponse: {
@@ -272,16 +312,39 @@ export function useRihlaLive(
       }
 
       if ("serverContent" in msg && msg.serverContent) {
-        const parts = msg.serverContent?.modelTurn?.parts ?? [];
+        const sc = msg.serverContent;
+
+        // User speech transcript (when inputAudioTranscription is enabled in setup).
+        if (sc.inputTranscription?.text) {
+          const t = sc.inputTranscription.text;
+          callbacksRef.current.onTranscript?.(t, true);
+          if (sc.inputTranscription.finished) {
+            void persistEvent({ kind: "user_text", text: t });
+          }
+        }
+        // Model speech transcript.
+        if (sc.outputTranscription?.text) {
+          const t = sc.outputTranscription.text;
+          assistantBufferRef.current += t;
+          callbacksRef.current.onTranscript?.(t, false);
+        }
+
+        const parts = sc?.modelTurn?.parts ?? [];
         for (const part of parts) {
           if (part.inlineData?.data) {
             enqueueAudio(part.inlineData.data);
           }
           if (part.text) {
+            assistantBufferRef.current += part.text;
             callbacksRef.current.onTranscript?.(part.text, false);
           }
         }
-        if (msg.serverContent?.turnComplete) {
+        if (sc?.turnComplete) {
+          // Flush the assistant buffer once per completed turn.
+          if (assistantBufferRef.current) {
+            void persistEvent({ kind: "assistant_text", text: assistantBufferRef.current });
+            assistantBufferRef.current = "";
+          }
           // Flush remaining audio
           if (playQueueRef.current.length > 0 && !isPlayingRef.current) {
             playNextChunk();
@@ -368,6 +431,7 @@ export function useRihlaLive(
       // doesn't.
       let systemPrompt = "";
       let resolvedVoice = voiceName;
+      let promptLocale = "fr-MA";
       try {
         const params = new URLSearchParams({
           locale,
@@ -376,12 +440,30 @@ export function useRihlaLive(
         });
         const res = await fetch(`/api/rihla/system-prompt?${params}`);
         if (res.ok) {
-          const j = (await res.json()) as { systemPrompt: string; voiceName?: string };
+          const j = (await res.json()) as { systemPrompt: string; voiceName?: string; locale?: string };
           systemPrompt = j.systemPrompt;
           if (j.voiceName) resolvedVoice = j.voiceName;
+          if (j.locale) promptLocale = j.locale;
         }
       } catch (err) {
         console.warn("[rihla-live] system-prompt fetch failed", err);
+      }
+
+      // Register a voice conversation row so transcripts + tool calls persist.
+      if (brandSlug) {
+        try {
+          const r = await fetch("/api/rihla/voice/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ brandSlug, locale: promptLocale }),
+          });
+          if (r.ok) {
+            const j = (await r.json()) as { id?: string };
+            if (j?.id) conversationIdRef.current = j.id;
+          }
+        } catch (err) {
+          console.warn("[rihla-live] voice/start failed", err);
+        }
       }
 
       ws.send(
@@ -394,6 +476,9 @@ export function useRihlaLive(
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: resolvedVoice } },
               },
             },
+            // Transcribe both sides so we can persist them.
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             systemInstruction: { parts: [{ text: systemPrompt }] },
             tools: LIVE_TOOLS,
           },
@@ -432,14 +517,20 @@ export function useRihlaLive(
   }, []);
 
   const disconnect = useCallback(() => {
+    // Mark the voice conversation closed (best effort).
+    if (conversationIdRef.current) {
+      void persistEvent({ kind: "end" });
+    }
     wsRef.current?.close();
     wsRef.current = null;
     stopMic();
     playQueueRef.current = [];
     isPlayingRef.current = false;
     shouldDisconnectRef.current = false;
+    assistantBufferRef.current = "";
+    conversationIdRef.current = null;
     updateState("idle");
-  }, [stopMic, updateState]);
+  }, [persistEvent, stopMic, updateState]);
 
   disconnectRef.current = disconnect;
 
