@@ -81,6 +81,12 @@ export type VideoCardPayload = {
   searchUrl: string;
   /** Plain query for the heading ("Peugeot 5008"). */
   query?: string;
+  /** Embed URL (youtube-nocookie) — when present, the card renders an inline
+   *  iframe player instead of just a link. Resolved server-side via
+   *  /api/rihla/find-video using the YouTube Data API. */
+  embedUrl?: string | null;
+  /** Optional title surfaced to the user under the player. */
+  title?: string;
 };
 
 export function emitVideoCard(payload: VideoCardPayload) {
@@ -246,14 +252,40 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
       case "show_model_video": {
         const slug = String(input.slug ?? input.modelSlug ?? "");
         const model = slug ? findModel(slug) : undefined;
-        const query = encodeURIComponent(`${brand?.name ?? ""} ${model?.name ?? slug} test drive review`.trim());
-        const youtubeUrl = `https://www.youtube.com/results?search_query=${query}`;
+        const queryRaw = `${brand?.name ?? ""} ${model?.name ?? slug}`.trim();
+        const queryWithSuffix = `${queryRaw} walkaround review`;
+        const fallbackSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(queryWithSuffix)}`;
+        // Emit a card immediately with just the search fallback, then
+        // resolve the embed URL asynchronously and re-emit with embedUrl set.
         emitVideoCard({
           modelSlug: slug || undefined,
           caption: model?.name,
-          searchUrl: youtubeUrl,
-          query: `${brand?.name ?? ""} ${model?.name ?? slug}`.trim(),
+          searchUrl: fallbackSearch,
+          query: queryRaw,
+          embedUrl: null,
         });
+        if (typeof window !== "undefined" && queryRaw) {
+          const params = new URLSearchParams({ q: queryWithSuffix });
+          if (brand?.slug) params.set("brand", brand.slug);
+          fetch(`/api/rihla/find-video?${params}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((j) => {
+              if (!j) return;
+              const embedUrl = (j as { embedUrl?: string | null }).embedUrl ?? null;
+              const title = (j as { title?: string }).title;
+              if (embedUrl) {
+                emitVideoCard({
+                  modelSlug: slug || undefined,
+                  caption: model?.name,
+                  searchUrl: fallbackSearch,
+                  query: queryRaw,
+                  embedUrl,
+                  title,
+                });
+              }
+            })
+            .catch(() => {});
+        }
         return `showed video card for ${slug || "model"}`;
       }
       case "open_brand_page": {
