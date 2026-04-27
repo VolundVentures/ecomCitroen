@@ -59,6 +59,7 @@ const CITROEN_FALLBACK: BrandContext = {
   agentName: "Rihla",
   market: "MA",
   defaultCurrency: "MAD",
+  servedCities: ["Casablanca", "Rabat", "Marrakech", "Tanger", "Fès", "Agadir", "Oujda", "Tétouan"],
   models: [
     { slug: "c3-aircross", name: "C3 Aircross", priceFrom: 234900, currency: "MAD", fuel: "Hybrid", seats: 5 },
     { slug: "c5-aircross", name: "C5 Aircross", priceFrom: 295900, currency: "MAD", fuel: "PHEV", seats: 5 },
@@ -156,6 +157,18 @@ const GEMINI_NAV_TOOLS: Tool[] = [
         },
       },
       {
+        name: "show_model_video",
+        description: "Display a video preview card for a specific model. Call when the user asks for a video, walk-around, review, or wants to see the car in motion. The card opens YouTube search results for that model in a new tab.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            slug: { type: Type.STRING },
+            caption: { type: Type.STRING },
+          },
+          required: ["slug"],
+        },
+      },
+      {
         name: "open_brand_page",
         description: "Open the official brand-site page for a model in a new browser tab.",
         parameters: {
@@ -225,6 +238,7 @@ const ANTHROPIC_NAV_TOOLS: Anthropic.Messages.Tool[] = [
   { name: "open_financing", description: "Open financing.", input_schema: { type: "object" as const, properties: {}, required: [] } },
   { name: "scroll_to", description: "Scroll to section.", input_schema: { type: "object" as const, properties: { section: { type: "string" as const } }, required: ["section"] } },
   { name: "show_model_image", description: "Display a photo of a specific model inline in the chat.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, caption: { type: "string" as const } }, required: ["slug"] } },
+  { name: "show_model_video", description: "Display a video preview card (opens YouTube in a new tab) for a model. Use when the user asks for a video, walk-around, or review.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, caption: { type: "string" as const } }, required: ["slug"] } },
   { name: "open_brand_page", description: "Open the official brand-site page for a model in a new browser tab.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const } }, required: ["slug"] } },
   { name: "book_test_drive", description: "Book a test drive once you have firstName + phone + city + slot.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["slug", "firstName", "phone"] } },
   { name: "book_showroom_visit", description: "Schedule a showroom visit (user wants to see cars in person, not drive).", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["firstName", "phone"] } },
@@ -467,10 +481,14 @@ export async function POST(req: NextRequest) {
 
   const geminiKey = process.env.GOOGLE_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  const provider: "gemini" | "anthropic" | "none" = geminiKey
-    ? "gemini"
-    : anthropicKey
+  // Claude-first for text chat: noticeably more reliable tool use across
+  // languages (Gemini is hit-or-miss in Arabic and sometimes emits a tool
+  // call without any spoken text, which leaves a stuck-looking turn). Voice
+  // mode still goes through Gemini Live in a separate code path.
+  const provider: "gemini" | "anthropic" | "none" = anthropicKey
     ? "anthropic"
+    : geminiKey
+    ? "gemini"
     : "none";
 
   if (provider === "none") {
@@ -559,20 +577,19 @@ export async function POST(req: NextRequest) {
           emit(tap, encoder, { type: "tool", name: fastIntent.name, input: fastIntent.input });
         }
 
-        if (provider === "gemini") {
+        if (provider === "anthropic") {
           try {
-            await streamWithGemini(tap, encoder, systemPrompt, body.messages);
-          } catch (geminiErr) {
-            const fallbackKey = process.env.ANTHROPIC_API_KEY;
-            if (fallbackKey) {
-              console.warn("[rihla/chat] Gemini failed, falling back to Claude:", (geminiErr as Error).message?.slice(0, 80));
-              await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
+            await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
+          } catch (anthropicErr) {
+            if (process.env.GOOGLE_API_KEY) {
+              console.warn("[rihla/chat] Claude failed, falling back to Gemini:", (anthropicErr as Error).message?.slice(0, 80));
+              await streamWithGemini(tap, encoder, systemPrompt, body.messages);
             } else {
-              throw geminiErr;
+              throw anthropicErr;
             }
           }
         } else {
-          await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
+          await streamWithGemini(tap, encoder, systemPrompt, body.messages);
         }
         emit(controller, encoder, { type: "done" });
         controller.close();

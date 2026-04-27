@@ -4,14 +4,29 @@ import { motion } from "framer-motion";
 import { ExternalLink, MapPin, Phone, Clock, MessageCircle, Star } from "lucide-react";
 import type { ShowroomItem } from "@/lib/rihla-actions";
 
+type Locale = "fr" | "ar" | "darija" | "en" | null | undefined;
+
+function showroomHeader(count: number, city: string | undefined, locale: Locale): string {
+  const cityPart = city ? ` · ${city}` : "";
+  if (locale === "ar" || locale === "darija") {
+    if (count === 1) return `معرض واحد${cityPart}`;
+    if (count === 2) return `معرضان${cityPart}`;
+    return `${count} معارض${cityPart}`;
+  }
+  if (locale === "en") return `${count} showroom${count > 1 ? "s" : ""}${cityPart}`;
+  return `${count} concession${count > 1 ? "s" : ""}${cityPart}`;
+}
+
 export function ShowroomCards({
   items,
   city,
   accent,
+  locale,
 }: {
   items: ShowroomItem[];
   city?: string;
   accent: string;
+  locale?: Locale;
 }) {
   if (items.length === 0) return null;
   return (
@@ -27,7 +42,7 @@ export function ShowroomCards({
       </div>
       <div className="flex-1 space-y-1.5">
         <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-black/50">
-          {items.length} showroom{items.length > 1 ? "s" : ""} {city ? `· ${city}` : ""}
+          {showroomHeader(items.length, city, locale)}
         </div>
         <div className="space-y-1.5">
           {items.slice(0, 4).map((s, i) => (

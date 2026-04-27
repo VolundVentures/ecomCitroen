@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Eye, History, RotateCcw } from "lucide-react";
+import { Check, Eye, History, RotateCcw, Sparkles, Plus } from "lucide-react";
 import type { PromptVersion } from "@/lib/supabase/database.types";
 import { savePromptAction, activatePromptAction } from "@/app/admin/[brand]/prompt/actions";
 
@@ -11,6 +11,45 @@ type Props = {
   prompts: PromptVersion[];
   accent: string;
 };
+
+const TONE_BLOCK_HEADER = "═══ TONE OVERRIDE ═══";
+
+const TONE_PRESETS: Array<{ key: string; label: string; body: string }> = [
+  {
+    key: "warm",
+    label: "Warm",
+    body:
+      "Speak in a friendly, conversational, human-first tone. Short sentences, generous acknowledgements, gentle humour when appropriate. Never stiff. The customer should feel like they're chatting with a helpful friend who happens to know cars.",
+  },
+  {
+    key: "direct",
+    label: "Direct",
+    body:
+      "Keep replies brief, factual, decisive. No filler, no flowery praise of the customer. Drive the qualification quickly without sacrificing politeness. One sentence preferred over two.",
+  },
+  {
+    key: "premium",
+    label: "Premium",
+    body:
+      "Speak in an elevated, concierge-grade tone. Polished vocabulary, calm pace, never pushy. Frame the visit as an experience rather than a transaction. Use the customer's first name once you have it.",
+  },
+  {
+    key: "playful",
+    label: "Playful",
+    body:
+      "Light, witty, energetic. One short joke or playful aside per conversation is welcome. Never sarcastic, never at the customer's expense. Always pivot back to the qualification within one turn.",
+  },
+];
+
+const STEP_TEMPLATE = `\n\nTURN N — [What to ask].\n  Good: "[Example]"\n  Bad: anything that combines this with another question.`;
+
+function applyTonePreset(draft: string, preset: { label: string; body: string }): string {
+  const block = `${TONE_BLOCK_HEADER}\n${preset.label}: ${preset.body}\n`;
+  // Strip any prior tone-override block (between this header and the next ═══ section).
+  const re = new RegExp(`${TONE_BLOCK_HEADER}[\\s\\S]*?(?=\\n═══|$)`, "g");
+  const stripped = draft.replace(re, "").trimStart();
+  return `${block}\n${stripped}`;
+}
 
 export function PromptEditorClient({ slug, prompts, accent }: Props) {
   const active = prompts.find((p) => p.is_active) ?? prompts[0];
@@ -85,6 +124,42 @@ export function PromptEditorClient({ slug, prompts, accent }: Props) {
               <History size={12} strokeWidth={1.7} />
               History
             </button>
+          </div>
+        </div>
+
+        {/* Quick edits — tone presets + step insert. Clicking a preset
+            stamps a TONE OVERRIDE block at the top of the prompt; "Add a
+            step" appends a TURN template at the bottom. */}
+        <div className="mb-4 rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
+          <div className="mb-2 flex items-center gap-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
+            <Sparkles size={11} strokeWidth={1.7} />
+            Quick edits — tone & flow
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-white/50">Tone:</span>
+            {TONE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setDraft((d) => applyTonePreset(d, p))}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/75 transition hover:border-white/30 hover:bg-white/[0.08] hover:text-white"
+                title={p.body}
+              >
+                {p.label}
+              </button>
+            ))}
+            <span className="ms-3 hidden h-4 w-px bg-white/10 sm:block" />
+            <button
+              type="button"
+              onClick={() => setDraft((d) => d.trimEnd() + STEP_TEMPLATE)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/75 transition hover:border-white/30 hover:bg-white/[0.08] hover:text-white"
+            >
+              <Plus size={11} strokeWidth={1.8} />
+              Add a step
+            </button>
+          </div>
+          <div className="mt-2 text-[10.5px] text-white/35">
+            Tone overrides land at the top of the prompt and update Rihla's voice immediately on save. Edit the TURN sections below to add, remove, or reorder steps in the conversation flow.
           </div>
         </div>
 

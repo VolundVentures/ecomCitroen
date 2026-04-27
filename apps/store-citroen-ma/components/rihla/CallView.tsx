@@ -31,6 +31,37 @@ const TYPE_LABELS: Record<NonNullable<CallViewProps["locale"]>, { tap: string; p
   en: { tap: "Type", placeholder: "Type your name, number…", sent: "Sent" },
 };
 
+function viewSiteLabel(locale: CallViewProps["locale"]): string {
+  if (locale === "ar" || locale === "darija") return "زر الموقع الرسمي";
+  if (locale === "en") return "View on official site";
+  return "Voir sur le site officiel";
+}
+
+function statusText(state: LiveState, locale: CallViewProps["locale"]): string {
+  if (locale === "en") {
+    if (state === "speaking") return "Rihla is speaking…";
+    if (state === "listening") return "Listening…";
+    if (state === "connecting") return "Connecting…";
+    return "On call";
+  }
+  if (locale === "ar" || locale === "darija") {
+    if (state === "speaking") return "رحلة تتحدث…";
+    if (state === "listening") return "تفضل…";
+    if (state === "connecting") return "جاري الاتصال…";
+    return "في المكالمة";
+  }
+  if (state === "speaking") return "Rihla parle…";
+  if (state === "listening") return "À vous…";
+  if (state === "connecting") return "Connexion…";
+  return "En appel";
+}
+
+function advisorLabel(locale: CallViewProps["locale"]): string {
+  if (locale === "ar" || locale === "darija") return "مستشارة";
+  if (locale === "en") return "Advisor";
+  return "Conseillère";
+}
+
 export function CallView({
   state,
   onHangUp,
@@ -47,14 +78,7 @@ export function CallView({
   const timeStr = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
   const isActive = state === "listening" || state === "speaking" || state === "connected";
-  const statusLabel =
-    state === "speaking"
-      ? "Rihla parle…"
-      : state === "listening"
-      ? "À vous…"
-      : state === "connecting"
-      ? "Connexion…"
-      : "En appel";
+  const statusLabel = statusText(state, locale);
 
   const dotColor = state === "listening" ? "#22c55e" : state === "speaking" ? accent : "#a3e635";
 
@@ -196,7 +220,7 @@ export function CallView({
 
         <div className="relative mt-6 text-center">
           <div className="text-xl font-semibold tracking-tight text-white">Rihla</div>
-          <div className="mt-0.5 text-[12px] text-white/45">Conseillère · {brandName}</div>
+          <div className="mt-0.5 text-[12px] text-white/45">{advisorLabel(locale)} · {brandName}</div>
 
           {/* Equalizer is positioned ABSOLUTELY below the name so it doesn't
               push the image card down when the agent starts speaking. */}
@@ -262,7 +286,7 @@ export function CallView({
                 className="flex items-center justify-between px-3.5 py-2 text-[12px] font-medium transition hover:bg-white/[0.04]"
                 style={{ color: accent }}
               >
-                <span>{currentImage.ctaLabel ?? "View on official site"}</span>
+                <span>{currentImage.ctaLabel ?? viewSiteLabel(locale)}</span>
                 <ExternalLink size={12} strokeWidth={2} />
               </a>
             )}

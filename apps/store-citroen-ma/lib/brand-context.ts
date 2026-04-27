@@ -15,6 +15,10 @@ export type FullBrandContext = {
   brand: Brand;
   activePrompt: PromptVersion | null;
   models: Model[];
+  /** Cities where this brand has at least one enabled showroom — used by the
+   *  prompt builder to ground the agent in real coverage so it doesn't get
+   *  stuck when a customer names a city outside the service area. */
+  servedCities: string[];
 };
 
 // In-process cache. Survives Supabase outages so the demo doesn't 404 mid-pitch.
@@ -47,7 +51,7 @@ export async function getBrandContext(slug: string): Promise<FullBrandContext | 
     }
     const brand = brandRow as unknown as Brand;
 
-    const [models, prompt] = await Promise.all([
+    const [models, prompt, showrooms] = await Promise.all([
       supa
         .from("models")
         .select("*")
@@ -62,12 +66,23 @@ export async function getBrandContext(slug: string): Promise<FullBrandContext | 
         .order("version", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supa
+        .from("showrooms")
+        .select("city")
+        .eq("brand_id", brand.id)
+        .eq("enabled", true),
     ]);
+
+    const cities = new Set<string>();
+    for (const row of (showrooms.data as { city?: string | null }[] | null) ?? []) {
+      if (row.city) cities.add(row.city.trim());
+    }
 
     const ctx: FullBrandContext = {
       brand,
       activePrompt: (prompt.data as unknown as PromptVersion | null) ?? null,
       models: (models.data as unknown as Model[]) ?? [],
+      servedCities: [...cities].sort(),
     };
     brandCache.set(slug, { ctx, cachedAt: Date.now() });
     return ctx;
@@ -158,7 +173,7 @@ async function loadFromJsonFallback(slug: string): Promise<FullBrandContext | nu
       updated_at: new Date().toISOString(),
     }));
 
-    return { brand, activePrompt: null, models };
+    return { brand, activePrompt: null, models, servedCities: [] };
   } catch {
     return null;
   }
@@ -185,6 +200,7 @@ export function toAgentContext(full: FullBrandContext): BrandContext {
     agentName: full.brand.agent_name,
     market: full.brand.market,
     defaultCurrency: full.brand.default_currency,
+    servedCities: full.servedCities,
     models: full.models.map((m) => ({
       slug: m.slug,
       name: m.name,

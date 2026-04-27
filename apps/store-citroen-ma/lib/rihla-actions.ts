@@ -18,6 +18,7 @@ const END_CALL_EVENT = "rihla:end-call";
 const TEST_DRIVE_EVENT = "rihla:test-drive";
 const IMAGE_CARD_EVENT = "rihla:image-card";
 const SHOWROOMS_EVENT = "rihla:showrooms";
+const VIDEO_CARD_EVENT = "rihla:video-card";
 
 export type ShowroomItem = {
   id: string;
@@ -71,6 +72,27 @@ export function onImageCard(cb: (p: ImageCardPayload) => void) {
   const listener = (e: Event) => cb((e as CustomEvent<ImageCardPayload>).detail);
   window.addEventListener(IMAGE_CARD_EVENT, listener);
   return () => window.removeEventListener(IMAGE_CARD_EVENT, listener);
+}
+
+export type VideoCardPayload = {
+  modelSlug?: string;
+  caption?: string;
+  /** YouTube search URL we'll open in a new tab when user taps the card. */
+  searchUrl: string;
+  /** Plain query for the heading ("Peugeot 5008"). */
+  query?: string;
+};
+
+export function emitVideoCard(payload: VideoCardPayload) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<VideoCardPayload>(VIDEO_CARD_EVENT, { detail: payload }));
+}
+
+export function onVideoCard(cb: (p: VideoCardPayload) => void) {
+  if (typeof window === "undefined") return () => {};
+  const listener = (e: Event) => cb((e as CustomEvent<VideoCardPayload>).detail);
+  window.addEventListener(VIDEO_CARD_EVENT, listener);
+  return () => window.removeEventListener(VIDEO_CARD_EVENT, listener);
 }
 
 export type TestDrivePayload = {
@@ -217,10 +239,22 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
           modelSlug: slug || undefined,
           imageUrl,
           caption,
-          ctaLabel: model ? "Voir sur le site officiel" : undefined,
           ctaUrl: model?.pageUrl,
         });
         return `showed image for ${slug || "model"}`;
+      }
+      case "show_model_video": {
+        const slug = String(input.slug ?? input.modelSlug ?? "");
+        const model = slug ? findModel(slug) : undefined;
+        const query = encodeURIComponent(`${brand?.name ?? ""} ${model?.name ?? slug} test drive review`.trim());
+        const youtubeUrl = `https://www.youtube.com/results?search_query=${query}`;
+        emitVideoCard({
+          modelSlug: slug || undefined,
+          caption: model?.name,
+          searchUrl: youtubeUrl,
+          query: `${brand?.name ?? ""} ${model?.name ?? slug}`.trim(),
+        });
+        return `showed video card for ${slug || "model"}`;
       }
       case "open_brand_page": {
         const slug = String(input.slug ?? "");
@@ -241,7 +275,6 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
               modelSlug: slug,
               imageUrl: model.heroImage,
               caption: model.name,
-              ctaLabel: "Voir sur le site officiel",
               ctaUrl: model.pageUrl,
             });
             return `showed ${slug} (widget mode)`;

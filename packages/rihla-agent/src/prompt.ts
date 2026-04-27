@@ -13,6 +13,9 @@ export type BrandContext = {
   agentName: string;          // "Rihla"
   market: string;             // "MA" / "SA"
   defaultCurrency: string;    // "MAD" / "SAR"
+  /** Cities where this brand has at least one active showroom. Empty when no
+   *  data — the prompt will skip the coverage section in that case. */
+  servedCities?: string[];
   models: Array<{
     slug: string;
     name: string;
@@ -101,6 +104,24 @@ function modelCatalog(brand: BrandContext): string {
   return `═══ CATALOG — ${brand.brandName.toUpperCase()} ═══\n\n(Use ONLY these models. Never invent. Pass the slug to tools.)\n\n${lines.join("\n\n")}`;
 }
 
+function coverageBlock(brand: BrandContext): string {
+  const cities = brand.servedCities ?? [];
+  if (cities.length === 0) return "";
+  const list = cities.join(", ");
+  return [
+    `═══ SHOWROOM COVERAGE — ${brand.brandName.toUpperCase()} ═══`,
+    "",
+    `${brand.brandName} currently operates showrooms ONLY in these cities: ${list}.`,
+    "",
+    "If the customer names a city NOT in this list (e.g. they say Dubai when we only serve KSA cities, or a small Moroccan town we don't cover):",
+    "  1. Acknowledge briefly and warmly — never get stuck or silent.",
+    "  2. Tell them the cities you DO serve, in their language.",
+    "  3. Ask which of those is closest to them, OR offer to take their details so a dealer can call.",
+    "",
+    "Never invent a showroom. Never promise coverage outside the listed cities. Never repeat a city the user already gave you as if it were your suggestion.",
+  ].join("\n");
+}
+
 export function buildSystemPrompt(input: SystemPromptInput): string {
   const { locale, brand, dealerCityHint, returningUser, sessionSummary, customBody } = input;
 
@@ -110,8 +131,9 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
   const head = `You are ${brand.agentName}, a senior sales advisor for ${brand.brandName}. Always respond to the customer in the language defined by the LANGUAGE block below.`;
 
   // If the admin has provided a custom prompt body, render it verbatim with
-  // brand-aware language + catalog blocks appended for safety.
+  // brand-aware language + catalog + coverage blocks appended for safety.
   if (customBody && customBody.trim().length > 0) {
+    const coverage = coverageBlock(brand);
     return [
       head,
       "",
@@ -120,9 +142,10 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
       customBody.trim(),
       "",
       modelCatalog(brand),
+      coverage ? "\n" + coverage : "",
       "",
       contextBlock({ locale, dealerCityHint, returningUser, sessionSummary }),
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   // Default flow — same skeleton as before but brand-driven.
@@ -157,6 +180,8 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     "Tu DOIS appeler end_call() après toute phrase d'au revoir, après un booking réussi, ou après deux refus. Jamais relancer après end_call().",
     "",
     modelCatalog(brand),
+    "",
+    coverageBlock(brand),
     "",
     "═══ OUTILS ═══",
     "- open_model(slug) → Ouvrir la page du modèle (côté brand-site, nouvel onglet).",

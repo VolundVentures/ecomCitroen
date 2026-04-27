@@ -106,6 +106,18 @@ const LIVE_TOOLS = [
         },
       },
       {
+        name: "show_model_video",
+        description: "Display a video preview card for a model — opens YouTube search in a new tab. Use when user asks for a video, walk-around, or review.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            slug: { type: "STRING", description: "The model slug." },
+            caption: { type: "STRING", description: "Optional one-line caption." },
+          },
+          required: ["slug"],
+        },
+      },
+      {
         name: "open_brand_page",
         description: "Open the official brand-site page for a model in a new browser tab. Use when the user wants to see more details, specs, or configure on the official site.",
         parameters: {

@@ -15,8 +15,10 @@ import {
   onEndCall,
   onImageCard,
   onShowrooms,
+  onVideoCard,
   type ImageCardPayload,
   type ShowroomsPayload,
+  type VideoCardPayload,
   type WidgetBrand,
 } from "@/lib/rihla-actions";
 import { useRihlaLive, type LiveToolCall } from "@/lib/use-rihla-live";
@@ -28,6 +30,7 @@ import { ShowroomCards } from "@/components/rihla/ShowroomCards";
 type Msg =
   | { kind: "text"; role: "user" | "assistant"; text: string; tools?: Array<{ name: string; input: Record<string, unknown> }> }
   | { kind: "image_card"; role: "assistant"; payload: ImageCardPayload }
+  | { kind: "video_card"; role: "assistant"; payload: VideoCardPayload }
   | { kind: "showrooms"; role: "assistant"; payload: ShowroomsPayload };
 
 type StreamEvent =
@@ -125,8 +128,19 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   }, []);
 
   useEffect(() => {
+    return onVideoCard((payload) => {
+      setMessages((m) => [...m, { kind: "video_card", role: "assistant", payload }]);
+    });
+  }, []);
+
+  useEffect(() => {
     return onShowrooms((payload) => {
-      setMessages((m) => [...m, { kind: "showrooms", role: "assistant", payload }]);
+      // Replace any prior showroom block — only the latest city's results stay
+      // visible. Prevents the "Riyadh entries linger after I asked for Jeddah" bug.
+      setMessages((m) => {
+        const filtered = m.filter((x) => x.kind !== "showrooms");
+        return [...filtered, { kind: "showrooms", role: "assistant", payload }];
+      });
     });
   }, []);
 
@@ -247,8 +261,12 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   const sendTextMessage = useCallback(async (text: string) => {
     const current = messagesRef.current;
     const userMsg: Msg = { kind: "text", role: "user", text };
-    const assistantMsg: Msg = { kind: "text", role: "assistant", text: "", tools: [] };
-    const next: Msg[] = [...current, userMsg, assistantMsg];
+    // Don't pre-create an empty assistant bubble — it leaves a visual artifact
+    // when the model only emits a tool call (find_showrooms, show_model_image)
+    // without any text. We create the assistant message lazily on the first
+    // text token. Tool-only responses stand on their own as image / showroom
+    // / video cards (pushed via the event bus subscriptions above).
+    const next: Msg[] = [...current, userMsg];
     setMessages(next);
     setIsStreaming(true);
 
@@ -261,9 +279,10 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
     const controller = new AbortController();
     abortRef.current = controller;
 
+    let assistantStarted = false;
+
     try {
       const apiMessages = next
-        .slice(0, -1)
         .filter((m): m is Extract<Msg, { kind: "text" }> => m.kind === "text")
         .map((m) => ({ role: m.role, content: m.text }));
 
@@ -303,46 +322,51 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
             setMessages((m) => {
               const copy = [...m];
               const last = copy[copy.length - 1];
-              if (last?.kind === "text" && last.role === "assistant") {
+              if (assistantStarted && last?.kind === "text" && last.role === "assistant") {
                 copy[copy.length - 1] = { ...last, text: textAcc };
+              } else {
+                // First text token — create the assistant bubble now.
+                copy.push({ kind: "text", role: "assistant", text: textAcc, tools: [] });
               }
               return copy;
             });
+            assistantStarted = true;
           } else if (ev.type === "tool") {
             dispatchRihlaTool(
               { name: ev.name, input: ev.input },
               { locale: apiLocale, router: { push: () => {} }, brand }
             );
-            setMessages((m) => {
-              const copy = [...m];
-              const last = copy[copy.length - 1];
-              if (last?.kind === "text" && last.role === "assistant") {
-                copy[copy.length - 1] = {
-                  ...last,
-                  tools: [...(last.tools ?? []), { name: ev.name, input: ev.input }],
-                };
-              }
-              return copy;
-            });
+            // Only attach the tool chip to an existing assistant text bubble.
+            // If the response is tool-only, the card itself is the assistant
+            // turn — no empty bubble needed.
+            if (assistantStarted) {
+              setMessages((m) => {
+                const copy = [...m];
+                const last = copy[copy.length - 1];
+                if (last?.kind === "text" && last.role === "assistant") {
+                  copy[copy.length - 1] = {
+                    ...last,
+                    tools: [...(last.tools ?? []), { name: ev.name, input: ev.input }],
+                  };
+                }
+                return copy;
+              });
+            }
           }
         }
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        setMessages((m) => {
-          const copy = [...m];
-          const last = copy[copy.length - 1];
-          if (last?.kind === "text" && last.role === "assistant" && !last.text) {
-            copy[copy.length - 1] = { ...last, text: "Petit souci technique." };
-          }
-          return copy;
-        });
+        setMessages((m) => [
+          ...m,
+          { kind: "text", role: "assistant", text: technicalErrorText(voiceLang) },
+        ]);
       }
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [apiLocale, brand, live]);
+  }, [apiLocale, brand, live, voiceLang]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -581,7 +605,10 @@ function BubblePanel(p: PanelProps) {
               <div className="space-y-3">
                 {p.messages.map((m, i) => {
                   if (m.kind === "image_card") {
-                    return <ImageCardMsg key={i} payload={m.payload} accent={p.accent} />;
+                    return <ImageCardMsg key={i} payload={m.payload} accent={p.accent} locale={p.voiceLang} />;
+                  }
+                  if (m.kind === "video_card") {
+                    return <VideoCardMsg key={i} payload={m.payload} accent={p.accent} locale={p.voiceLang} />;
                   }
                   if (m.kind === "showrooms") {
                     return (
@@ -590,6 +617,7 @@ function BubblePanel(p: PanelProps) {
                         items={m.payload.items}
                         city={m.payload.city}
                         accent={p.accent}
+                        locale={p.voiceLang}
                       />
                     );
                   }
@@ -603,6 +631,20 @@ function BubblePanel(p: PanelProps) {
                     />
                   );
                 })}
+                {/* Lightweight typing indicator while waiting for the first
+                    token, so a tool-only response doesn't feel "stuck". */}
+                {p.isStreaming &&
+                  p.messages[p.messages.length - 1]?.role === "user" && (
+                    <div className="flex items-end gap-2">
+                      <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/brand/rihla-avatar.jpg" alt="" className="h-full w-full object-cover" />
+                      </div>
+                      <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_0_1px_rgba(0,0,0,0.04)]">
+                        <TypingDots />
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -903,7 +945,16 @@ function TextMsg({
   );
 }
 
-function ImageCardMsg({ payload, accent }: { payload: ImageCardPayload; accent: string }) {
+function ImageCardMsg({
+  payload,
+  accent,
+  locale,
+}: {
+  payload: ImageCardPayload;
+  accent: string;
+  locale: VoiceLang | null;
+}) {
+  const ctaLabel = payload.ctaLabel ?? defaultViewSiteLabel(locale);
   return (
     <motion.div
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
@@ -923,12 +974,13 @@ function ImageCardMsg({ payload, accent }: { payload: ImageCardPayload; accent: 
               alt={payload.caption ?? ""}
               className="h-full w-full object-cover transition-transform duration-700 hover:scale-[1.03]"
             />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
-            {payload.caption && (
-              <div className="absolute inset-x-0 bottom-0 px-3.5 pb-2 pt-6">
-                <div className="text-[12px] font-semibold text-white drop-shadow-sm">{payload.caption}</div>
-              </div>
-            )}
+          </div>
+        )}
+        {/* Caption sits BELOW the image — never overlaid. Avoids the
+            description-overlapping-the-car artifact. */}
+        {payload.caption && (
+          <div className="px-3.5 pb-1.5 pt-3 text-[13px] font-semibold leading-snug text-[#0c0c10]">
+            {payload.caption}
           </div>
         )}
         {payload.ctaUrl && (
@@ -939,13 +991,97 @@ function ImageCardMsg({ payload, accent }: { payload: ImageCardPayload; accent: 
             className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-[12px] font-medium transition hover:bg-black/[0.03]"
             style={{ color: accent }}
           >
-            <span>{payload.ctaLabel ?? "Voir plus"}</span>
+            <span>{ctaLabel}</span>
             <ExternalLink size={12} strokeWidth={2} />
           </a>
         )}
       </div>
     </motion.div>
   );
+}
+
+function VideoCardMsg({
+  payload,
+  accent,
+  locale,
+}: {
+  payload: VideoCardPayload;
+  accent: string;
+  locale: VoiceLang | null;
+}) {
+  const ctaLabel = defaultWatchLabel(locale);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
+      className="flex items-end gap-2"
+    >
+      <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
+        <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
+      </div>
+      <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.05)]">
+        <a
+          href={payload.searchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block"
+        >
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-[#1f1f23] to-[#0c0c10]">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_12px_28px_-8px_rgba(0,0,0,0.45)] transition group-hover:scale-105"
+                style={{ color: accent }}
+              >
+                <PlayTriangle />
+              </div>
+            </div>
+            <div className="absolute bottom-2 left-3 text-[10px] uppercase tracking-[0.2em] text-white/55">
+              YouTube
+            </div>
+          </div>
+          {payload.caption && (
+            <div className="px-3.5 pb-1.5 pt-3 text-[13px] font-semibold leading-snug text-[#0c0c10]">
+              {payload.caption}
+            </div>
+          )}
+          <div
+            className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-[12px] font-medium transition hover:bg-black/[0.03]"
+            style={{ color: accent }}
+          >
+            <span>{ctaLabel}</span>
+            <ExternalLink size={12} strokeWidth={2} />
+          </div>
+        </a>
+      </div>
+    </motion.div>
+  );
+}
+
+function PlayTriangle() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <path d="M5 3.5v9l8-4.5z" />
+    </svg>
+  );
+}
+
+function defaultViewSiteLabel(locale: VoiceLang | null): string {
+  if (locale === "ar" || locale === "darija") return "زر الموقع الرسمي";
+  if (locale === "en") return "View on official site";
+  return "Voir sur le site officiel";
+}
+
+function defaultWatchLabel(locale: VoiceLang | null): string {
+  if (locale === "ar" || locale === "darija") return "شاهد الفيديو على يوتيوب";
+  if (locale === "en") return "Watch on YouTube";
+  return "Voir la vidéo sur YouTube";
+}
+
+function technicalErrorText(locale: VoiceLang | null): string {
+  if (locale === "ar" || locale === "darija") return "عذراً، حدث خلل تقني بسيط.";
+  if (locale === "en") return "A small technical hiccup — please try again.";
+  return "Petit souci technique.";
 }
 
 function TypingDots() {
