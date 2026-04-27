@@ -129,25 +129,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
 
   useEffect(() => {
     return onVideoCard((payload) => {
-      // Two-phase emit: the first event arrives instantly with just the
-      // search fallback; the second arrives once the YouTube Data API
-      // resolves and includes an embedUrl. We merge into the same card so
-      // the user sees one card that "becomes" a player, not two cards.
-      setMessages((m) => {
-        const copy = [...m];
-        for (let i = copy.length - 1; i >= 0; i--) {
-          const msg = copy[i];
-          if (
-            msg?.kind === "video_card" &&
-            msg.payload.modelSlug === payload.modelSlug &&
-            msg.payload.query === payload.query
-          ) {
-            copy[i] = { ...msg, payload: { ...msg.payload, ...payload } };
-            return copy;
-          }
-        }
-        return [...copy, { kind: "video_card", role: "assistant", payload }];
-      });
+      setMessages((m) => [...m, { kind: "video_card", role: "assistant", payload }]);
     });
   }, []);
 
@@ -1021,14 +1003,11 @@ function ImageCardMsg({
 function VideoCardMsg({
   payload,
   accent,
-  locale,
 }: {
   payload: VideoCardPayload;
   accent: string;
   locale: VoiceLang | null;
 }) {
-  const ctaLabel = defaultWatchLabel(locale);
-  const heading = payload.title ?? payload.caption ?? payload.query;
   return (
     <motion.div
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
@@ -1040,79 +1019,23 @@ function VideoCardMsg({
         <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
       </div>
       <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.05)]">
-        {payload.embedUrl ? (
-          <>
-            <div className="relative aspect-video w-full overflow-hidden bg-black">
-              <iframe
-                src={payload.embedUrl}
-                title={heading ?? "Video"}
-                referrerPolicy="strict-origin-when-cross-origin"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="absolute inset-0 h-full w-full border-0"
-              />
-            </div>
-            {heading && (
-              <div className="px-3.5 pb-1.5 pt-3 text-[13px] font-semibold leading-snug text-[#0c0c10]">
-                {heading}
-              </div>
-            )}
-            <a
-              href={payload.searchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-[12px] font-medium transition hover:bg-black/[0.03]"
-              style={{ color: accent }}
-            >
-              <span>{ctaLabel}</span>
-              <ExternalLink size={12} strokeWidth={2} />
-            </a>
-          </>
-        ) : (
-          <a href={payload.searchUrl} target="_blank" rel="noopener noreferrer" className="block">
-            <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-[#1f1f23] to-[#0c0c10]">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_12px_28px_-8px_rgba(0,0,0,0.45)] transition group-hover:scale-105"
-                  style={{ color: accent }}
-                >
-                  <PlayTriangle />
-                </div>
-              </div>
-              <div className="absolute bottom-2 left-3 text-[10px] uppercase tracking-[0.2em] text-white/55">
-                {searchingLabel(locale)}
-              </div>
-            </div>
-            {payload.caption && (
-              <div className="px-3.5 pb-1.5 pt-3 text-[13px] font-semibold leading-snug text-[#0c0c10]">
-                {payload.caption}
-              </div>
-            )}
-            <div
-              className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-[12px] font-medium transition hover:bg-black/[0.03]"
-              style={{ color: accent }}
-            >
-              <span>{ctaLabel}</span>
-              <ExternalLink size={12} strokeWidth={2} />
-            </div>
-          </a>
+        <div className="relative aspect-video w-full overflow-hidden bg-black">
+          <video
+            src={payload.videoUrl}
+            poster={payload.poster}
+            controls
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        </div>
+        {payload.caption && (
+          <div className="border-t border-black/[0.04] px-3.5 py-2.5 text-[13px] font-semibold leading-snug text-[#0c0c10]" style={{ color: accent }}>
+            {payload.caption}
+          </div>
         )}
       </div>
     </motion.div>
-  );
-}
-
-function searchingLabel(locale: VoiceLang | null): string {
-  if (locale === "ar" || locale === "darija") return "جاري البحث على يوتيوب…";
-  if (locale === "en") return "Loading from YouTube…";
-  return "Chargement YouTube…";
-}
-
-function PlayTriangle() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-      <path d="M5 3.5v9l8-4.5z" />
-    </svg>
   );
 }
 
@@ -1120,12 +1043,6 @@ function defaultViewSiteLabel(locale: VoiceLang | null): string {
   if (locale === "ar" || locale === "darija") return "زر الموقع الرسمي";
   if (locale === "en") return "View on official site";
   return "Voir sur le site officiel";
-}
-
-function defaultWatchLabel(locale: VoiceLang | null): string {
-  if (locale === "ar" || locale === "darija") return "شاهد الفيديو على يوتيوب";
-  if (locale === "en") return "Watch on YouTube";
-  return "Voir la vidéo sur YouTube";
 }
 
 function technicalErrorText(locale: VoiceLang | null): string {

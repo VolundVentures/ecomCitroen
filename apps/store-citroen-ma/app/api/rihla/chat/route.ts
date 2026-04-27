@@ -368,7 +368,7 @@ async function streamWithGemini(
   }));
 
   const response = await ai.models.generateContentStream({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-lite-preview",
     contents,
     config: {
       systemInstruction,
@@ -481,14 +481,13 @@ export async function POST(req: NextRequest) {
 
   const geminiKey = process.env.GOOGLE_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  // Claude-first for text chat: noticeably more reliable tool use across
-  // languages (Gemini is hit-or-miss in Arabic and sometimes emits a tool
-  // call without any spoken text, which leaves a stuck-looking turn). Voice
-  // mode still goes through Gemini Live in a separate code path.
-  const provider: "gemini" | "anthropic" | "none" = anthropicKey
-    ? "anthropic"
-    : geminiKey
+  // Gemini-first: gemini-3.1-flash-lite-preview is fast and cheap, and the
+  // tightened prompt + guardrails make it reliable enough for the demo.
+  // Claude is the failover only.
+  const provider: "gemini" | "anthropic" | "none" = geminiKey
     ? "gemini"
+    : anthropicKey
+    ? "anthropic"
     : "none";
 
   if (provider === "none") {
@@ -577,19 +576,19 @@ export async function POST(req: NextRequest) {
           emit(tap, encoder, { type: "tool", name: fastIntent.name, input: fastIntent.input });
         }
 
-        if (provider === "anthropic") {
+        if (provider === "gemini") {
           try {
-            await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
-          } catch (anthropicErr) {
-            if (process.env.GOOGLE_API_KEY) {
-              console.warn("[rihla/chat] Claude failed, falling back to Gemini:", (anthropicErr as Error).message?.slice(0, 80));
-              await streamWithGemini(tap, encoder, systemPrompt, body.messages);
+            await streamWithGemini(tap, encoder, systemPrompt, body.messages);
+          } catch (geminiErr) {
+            if (process.env.ANTHROPIC_API_KEY) {
+              console.warn("[rihla/chat] Gemini failed, falling back to Claude:", (geminiErr as Error).message?.slice(0, 80));
+              await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
             } else {
-              throw anthropicErr;
+              throw geminiErr;
             }
           }
         } else {
-          await streamWithGemini(tap, encoder, systemPrompt, body.messages);
+          await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
         }
         emit(controller, encoder, { type: "done" });
         controller.close();
@@ -650,7 +649,7 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
-      "X-Rihla-Mode": provider === "gemini" ? "gemini-2.5-flash" : "claude-sonnet-4-6",
+      "X-Rihla-Mode": provider === "gemini" ? "gemini-3.1-flash-lite-preview" : "claude-opus-4-7",
     },
   });
 }

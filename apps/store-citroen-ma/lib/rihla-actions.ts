@@ -77,16 +77,12 @@ export function onImageCard(cb: (p: ImageCardPayload) => void) {
 export type VideoCardPayload = {
   modelSlug?: string;
   caption?: string;
-  /** YouTube search URL we'll open in a new tab when user taps the card. */
-  searchUrl: string;
-  /** Plain query for the heading ("Peugeot 5008"). */
-  query?: string;
-  /** Embed URL (youtube-nocookie) — when present, the card renders an inline
-   *  iframe player instead of just a link. Resolved server-side via
-   *  /api/rihla/find-video using the YouTube Data API. */
-  embedUrl?: string | null;
-  /** Optional title surfaced to the user under the player. */
-  title?: string;
+  /** Direct video URL (e.g. /videos/demo.mp4). Plays inline with native
+   *  <video> controls. Stellantis will hand over per-model assets at
+   *  deployment; until then we use the demo asset for every model. */
+  videoUrl: string;
+  /** Optional poster image shown before play. */
+  poster?: string;
 };
 
 export function emitVideoCard(payload: VideoCardPayload) {
@@ -252,40 +248,15 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
       case "show_model_video": {
         const slug = String(input.slug ?? input.modelSlug ?? "");
         const model = slug ? findModel(slug) : undefined;
-        const queryRaw = `${brand?.name ?? ""} ${model?.name ?? slug}`.trim();
-        const queryWithSuffix = `${queryRaw} walkaround review`;
-        const fallbackSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(queryWithSuffix)}`;
-        // Emit a card immediately with just the search fallback, then
-        // resolve the embed URL asynchronously and re-emit with embedUrl set.
+        // Single demo asset for every model — Stellantis will provide
+        // per-model video files at deployment. The card just demonstrates
+        // that videos can be played inline.
         emitVideoCard({
           modelSlug: slug || undefined,
-          caption: model?.name,
-          searchUrl: fallbackSearch,
-          query: queryRaw,
-          embedUrl: null,
+          caption: model?.name ?? slug,
+          videoUrl: "/videos/demo.mp4",
+          poster: model?.heroImage,
         });
-        if (typeof window !== "undefined" && queryRaw) {
-          const params = new URLSearchParams({ q: queryWithSuffix });
-          if (brand?.slug) params.set("brand", brand.slug);
-          fetch(`/api/rihla/find-video?${params}`)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((j) => {
-              if (!j) return;
-              const embedUrl = (j as { embedUrl?: string | null }).embedUrl ?? null;
-              const title = (j as { title?: string }).title;
-              if (embedUrl) {
-                emitVideoCard({
-                  modelSlug: slug || undefined,
-                  caption: model?.name,
-                  searchUrl: fallbackSearch,
-                  query: queryRaw,
-                  embedUrl,
-                  title,
-                });
-              }
-            })
-            .catch(() => {});
-        }
         return `showed video card for ${slug || "model"}`;
       }
       case "open_brand_page": {
