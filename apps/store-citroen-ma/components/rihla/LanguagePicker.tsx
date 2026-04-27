@@ -21,7 +21,10 @@ const LANGS: LangConfig[] = [
     label: "Français",
     native: "Français",
     sttTag: "fr-FR",
-    greeting: "Bonjour ! Je suis Rihla, votre conseillère. Que puis-je faire pour vous aujourd'hui ?",
+    // Use-case-led opener: skips the "Hi I'm a chatbot how can I help" preamble
+    // and qualifies on turn 1. The customer's first reply already names a
+    // segment we can recommend against.
+    greeting: "Salut ! Pour aller à l'essentiel — vous cherchez plutôt une citadine, un SUV famille, ou quelque chose pour les longs trajets ?",
     flag: "🇫🇷",
     hint: "Bonjour",
   },
@@ -30,7 +33,7 @@ const LANGS: LangConfig[] = [
     label: "Darija",
     native: "الدارجة المغربية",
     sttTag: "ar-MA",
-    greeting: "مرحبا بيك ! أنا رحلة، مستشارتك. كيفاش نقدر نعاونك اليوم ؟",
+    greeting: "السلام ! باش نختصرو — كتقلب على طوموبيل ديال المدينة، للعائلة، ولا للسفر و الخروج آخر الأسبوع ؟",
     flag: "🇲🇦",
     hint: "مرحبا",
   },
@@ -39,7 +42,7 @@ const LANGS: LangConfig[] = [
     label: "العربية",
     native: "العربية الفصحى",
     sttTag: "ar-SA",
-    greeting: "أهلاً وسهلاً ! أنا رحلة، مستشارتك. كيف يمكنني مساعدتك اليوم ؟",
+    greeting: "أهلاً وسهلاً ! خلّونا نختصر — تبحث عن سيارة للمدينة، للعائلة، أم لرحلات طويلة ؟",
     flag: "🇸🇦",
     hint: "أهلاً",
   },
@@ -48,7 +51,7 @@ const LANGS: LangConfig[] = [
     label: "English",
     native: "English",
     sttTag: "en-US",
-    greeting: "Hi there! I'm Rihla, your advisor. What can I help you with today?",
+    greeting: "Hi there! Quick start — are you looking for a city car, a family SUV, or something for longer trips?",
     flag: "🇬🇧",
     hint: "Hello",
   },

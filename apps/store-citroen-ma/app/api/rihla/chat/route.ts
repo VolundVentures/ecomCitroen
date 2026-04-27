@@ -368,7 +368,7 @@ async function streamWithGemini(
   }));
 
   const response = await ai.models.generateContentStream({
-    model: "gemini-3.1-flash-lite-preview",
+    model: "gemini-3.1-pro-preview",
     contents,
     config: {
       systemInstruction,
@@ -649,7 +649,7 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
-      "X-Rihla-Mode": provider === "gemini" ? "gemini-3.1-flash-lite-preview" : "claude-opus-4-7",
+      "X-Rihla-Mode": provider === "gemini" ? "gemini-3.1-pro-preview" : "claude-opus-4-7",
     },
   });
 }
