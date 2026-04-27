@@ -132,7 +132,7 @@ export function CallView({
       />
 
       {/* Top: status */}
-      <div className="relative text-center">
+      <div className="relative shrink-0 text-center">
         <div className="flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.22em] text-white/50">
           <motion.span
             className="h-2 w-2 rounded-full"
@@ -144,6 +144,12 @@ export function CallView({
         </div>
         <div className="mt-2 font-mono text-base tabular-nums text-white/55">{timeStr}</div>
       </div>
+
+      {/* Middle: avatar + (when present) image card, vertically centered.
+          Putting them in normal flex flow lets the avatar shrink to make room
+          for the image — the previous absolute positioning floated the image
+          on top of the avatar on small viewports. */}
+      <div className="relative flex w-full min-h-0 flex-1 flex-col items-center justify-center gap-4">
 
       {/* Center: avatar */}
       <div className="relative">
@@ -184,7 +190,9 @@ export function CallView({
         </AnimatePresence>
 
         <motion.div
-          className="relative h-44 w-44 overflow-hidden rounded-full ring-4 ring-white/10"
+          className={`relative overflow-hidden rounded-full ring-4 ring-white/10 transition-all duration-300 ${
+            currentImage?.imageUrl ? "h-28 w-28" : "h-40 w-40"
+          }`}
           style={{
             boxShadow: `0 0 80px -10px ${accent}66, 0 0 0 1px rgba(255,255,255,0.1)`,
           }}
@@ -218,9 +226,9 @@ export function CallView({
           />
         </motion.div>
 
-        <div className="relative mt-6 text-center">
-          <div className="text-xl font-semibold tracking-tight text-white">Rihla</div>
-          <div className="mt-0.5 text-[12px] text-white/45">{advisorLabel(locale)} · {brandName}</div>
+        <div className={`relative text-center ${currentImage?.imageUrl ? "mt-3" : "mt-5"}`}>
+          <div className={`font-semibold tracking-tight text-white ${currentImage?.imageUrl ? "text-base" : "text-xl"}`}>Rihla</div>
+          <div className={`mt-0.5 text-white/45 ${currentImage?.imageUrl ? "text-[11px]" : "text-[12px]"}`}>{advisorLabel(locale)} · {brandName}</div>
 
           {/* Equalizer is positioned ABSOLUTELY below the name so it doesn't
               push the image card down when the agent starts speaking. */}
@@ -247,10 +255,9 @@ export function CallView({
         </div>
       </div>
 
-      {/* Inline car image — appears when the agent fires show_model_image
-          during a voice call. Anchored fixed above the bottom controls so
-          the equalizer / avatar scaling never pushes it down or hides the
-          "View on official site" CTA. */}
+      {/* Inline car image — flex sibling of the avatar so they never
+          overlap on small viewports. Avatar shrinks above when this is
+          present so the layout self-balances. */}
       <AnimatePresence>
         {currentImage?.imageUrl && (
           <motion.div
@@ -259,10 +266,10 @@ export function CallView({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
             transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
-            className="absolute bottom-[148px] left-1/2 z-20 w-[min(360px,calc(100vw-48px))] -translate-x-1/2 overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_18px_42px_-12px_rgba(0,0,0,0.55)]"
+            className="z-20 w-[min(340px,calc(100vw-48px))] overflow-hidden rounded-2xl bg-white/[0.04]"
             style={{ boxShadow: `0 18px 42px -12px ${accent}55, 0 0 0 1px rgba(255,255,255,0.08)` }}
           >
-            <div className="relative aspect-[16/10] w-full overflow-hidden">
+            <div className="relative aspect-[16/8] w-full overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={currentImage.imageUrl}
@@ -293,9 +300,10 @@ export function CallView({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>{/* /middle flex wrapper */}
 
       {/* Bottom: controls */}
-      <div className="relative flex flex-col items-center gap-3">
+      <div className="relative shrink-0 flex flex-col items-center gap-3">
         {/* Inline text input — slides in when the user taps "Type" */}
         <AnimatePresence>
           {typing && onSendText && (

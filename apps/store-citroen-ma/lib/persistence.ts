@@ -233,6 +233,118 @@ export async function captureLeadFromBooking(args: {
   } catch { /* swallow */ }
 }
 
+/* ─────────────────── APV (after-sales) persistence ─────────────────── */
+
+export async function createServiceAppointment(args: {
+  brandSlug: string;
+  conversationId?: string | null;
+  refNumber: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  vehicleBrand: string;
+  vehicleModel: string;
+  vin: string;
+  interventionType: "mechanical" | "bodywork";
+  city: string;
+  preferredDate: string;          // ISO yyyy-mm-dd
+  preferredSlot: "morning" | "afternoon";
+  comment?: string;
+  cndpConsentAt: string;          // ISO timestamp
+  notes?: string;
+}): Promise<{ id: string; refNumber: string } | null> {
+  const supa = client();
+  if (!supa) return null;
+  try {
+    const { data: brandRow } = await supa.from("brands").select("id").eq("slug", args.brandSlug).single();
+    const brandId = (brandRow as unknown as { id?: string } | null)?.id;
+    if (!brandId) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supa.from("service_appointments") as any)
+      .insert({
+        brand_id: brandId,
+        conversation_id: args.conversationId ?? null,
+        ref_number: args.refNumber,
+        full_name: args.fullName,
+        phone: args.phone,
+        email: args.email,
+        vehicle_brand: args.vehicleBrand,
+        vehicle_model: args.vehicleModel,
+        vin: args.vin,
+        intervention_type: args.interventionType,
+        city: args.city,
+        preferred_date: args.preferredDate,
+        preferred_slot: args.preferredSlot,
+        comment: args.comment ?? null,
+        cndp_consent_at: args.cndpConsentAt,
+        source: "chatbot",
+        notes: args.notes ?? null,
+      })
+      .select("id, ref_number")
+      .single();
+    if (error || !data) return null;
+    return { id: (data as { id: string }).id, refNumber: (data as { ref_number: string }).ref_number };
+  } catch (err) {
+    console.warn("[persistence] createServiceAppointment failed:", (err as Error).message.slice(0, 100));
+    return null;
+  }
+}
+
+export async function createComplaint(args: {
+  brandSlug: string;
+  conversationId?: string | null;
+  refNumber: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  vehicleBrand: string;
+  vehicleModel: string;
+  vin: string;
+  interventionType: "mechanical" | "bodywork";
+  site: string;
+  serviceDate?: string | null;
+  reason: string;
+  attachmentUrl?: string | null;
+  cndpConsentAt: string;
+  crcNotes?: string;
+}): Promise<{ id: string; refNumber: string } | null> {
+  const supa = client();
+  if (!supa) return null;
+  try {
+    const { data: brandRow } = await supa.from("brands").select("id").eq("slug", args.brandSlug).single();
+    const brandId = (brandRow as unknown as { id?: string } | null)?.id;
+    if (!brandId) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supa.from("complaints") as any)
+      .insert({
+        brand_id: brandId,
+        conversation_id: args.conversationId ?? null,
+        ref_number: args.refNumber,
+        full_name: args.fullName,
+        phone: args.phone,
+        email: args.email,
+        vehicle_brand: args.vehicleBrand,
+        vehicle_model: args.vehicleModel,
+        vin: args.vin,
+        intervention_type: args.interventionType,
+        site: args.site,
+        service_date: args.serviceDate ?? null,
+        reason: args.reason,
+        attachment_url: args.attachmentUrl ?? null,
+        cndp_consent_at: args.cndpConsentAt,
+        source: "chatbot",
+        crc_notes: args.crcNotes ?? null,
+      })
+      .select("id, ref_number")
+      .single();
+    if (error || !data) return null;
+    return { id: (data as { id: string }).id, refNumber: (data as { ref_number: string }).ref_number };
+  } catch (err) {
+    console.warn("[persistence] createComplaint failed:", (err as Error).message.slice(0, 100));
+    return null;
+  }
+}
+
 export async function closeConversation(
   conversationId: string,
   status: ConversationStatus = "closed_no_lead"

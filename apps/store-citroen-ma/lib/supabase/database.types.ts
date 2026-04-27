@@ -147,3 +147,70 @@ export type Lead = {
   status: "new" | "contacted" | "closed";
   created_at: string;
 };
+
+export type AppointmentStatus =
+  | "new"
+  | "qualified"
+  | "assigned"
+  | "confirmed"
+  | "completed"
+  | "cancelled";
+
+export type InterventionType = "mechanical" | "bodywork";
+export type AppointmentSlot = "morning" | "afternoon";
+
+export type ServiceAppointment = {
+  id: string;
+  brand_id: string;
+  conversation_id: string | null;
+  ref_number: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  vehicle_brand: string;
+  vehicle_model: string;
+  vin: string;
+  intervention_type: InterventionType;
+  city: string;
+  preferred_date: string;       // ISO yyyy-mm-dd
+  preferred_slot: AppointmentSlot;
+  comment: string | null;
+  cndp_consent_at: string;
+  source: string;
+  status: AppointmentStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ComplaintStatus =
+  | "new"
+  | "qualified"
+  | "assigned"
+  | "in_progress"
+  | "resolved"
+  | "closed_no_resolution";
+
+export type Complaint = {
+  id: string;
+  brand_id: string;
+  conversation_id: string | null;
+  ref_number: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  vehicle_brand: string;
+  vehicle_model: string;
+  vin: string;
+  intervention_type: InterventionType;
+  site: string;
+  service_date: string | null;
+  reason: string;
+  attachment_url: string | null;
+  cndp_consent_at: string;
+  source: string;
+  status: ComplaintStatus;
+  crc_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};

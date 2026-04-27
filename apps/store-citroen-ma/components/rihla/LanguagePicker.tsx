@@ -62,6 +62,23 @@ export function getLangConfig(id: VoiceLang) {
   return LANGS.find((l) => l.id === id) ?? LANGS[0]!;
 }
 
+/** APV-aware welcomes — used by widgets that ALSO handle after-sales (RDV /
+ *  Info / Réclamation), currently jeep-ma only. The default sales-only
+ *  greetings live in the LANGS table above. */
+const APV_GREETINGS: Record<VoiceLang, string> = {
+  fr: "Bonjour ! Je suis Rihla. Je peux vous aider à choisir un nouveau véhicule, prendre rendez-vous à l'atelier, répondre à vos questions sur la garantie, l'entretien ou les accessoires, ou enregistrer une réclamation. Que puis-je faire pour vous ?",
+  darija: "السلام! أنا رحلة. كنقدر نعاونك تختار طوموبيل جديدة، تحجز رنديفو فالأتولي، تجاوب على أسئلة الضمان، الصيانة والإكسيسوار، ولا تسجل شكاية. شنو نقدر ندير ليك ؟",
+  ar: "أهلاً وسهلاً ! أنا رحلة. أساعدك في اختيار سيارة جديدة، حجز موعد للصيانة، الإجابة عن أسئلتك حول الضمان والصيانة والإكسسوارات، أو تسجيل شكوى. كيف أقدر أخدمك ؟",
+  en: "Hi! I'm Rihla. I can help you choose a new car, book a service appointment, answer your questions on warranty / maintenance / accessories, or take a complaint. What can I do for you?",
+};
+
+/** Returns the greeting to use as the chat opener — falls back to the
+ *  sales-only LANGS greeting for any brand that doesn't enable APV. */
+export function getOpeningGreeting(lang: VoiceLang, brandSlug: string): string {
+  if (brandSlug === "jeep-ma") return APV_GREETINGS[lang];
+  return getLangConfig(lang).greeting;
+}
+
 const HEADER_LINES = ["Bonjour", "مرحبا", "Hello"];
 
 export function LanguagePicker({

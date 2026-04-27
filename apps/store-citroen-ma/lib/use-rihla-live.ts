@@ -175,6 +175,60 @@ const LIVE_TOOLS = [
         description: "END THE CALL — call this IMMEDIATELY after your closing line whenever the user signals they're done. Triggers (any language, partial match): 'bye', 'goodbye', 'thanks', 'thank you', 'au revoir', 'merci', 'à bientôt', 'bonne journée', 'salut', 'شكرا', 'شكراً', 'بسلامة', 'في أمان الله', 'مع السلامة', 'يالله', 'يالاه', 'صافي', 'خلاص', 'تمام', 'تسلم', 'الله يعطيك العافية'. ALSO call after a successful book_test_drive + farewell. Never continue after a farewell — end_call is the only valid response.",
         parameters: { type: "OBJECT", properties: {} },
       },
+      // ─── APV (after-sales) — Jeep widget only. Never call for other brands. ───
+      {
+        name: "lookup_vin",
+        description: "APV ONLY. Look up a customer by VIN to pre-fill the form. Call as soon as the customer says their VIN (17 alphanumeric chars, no I/O/Q).",
+        parameters: {
+          type: "OBJECT",
+          properties: { vin: { type: "STRING" } },
+          required: ["vin"],
+        },
+      },
+      {
+        name: "book_service_appointment",
+        description: "APV ONLY. Submit the service-appointment (RDV) request once ALL fields are collected and the customer has explicitly given CNDP consent.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            fullName: { type: "STRING" },
+            phone: { type: "STRING" },
+            email: { type: "STRING" },
+            vehicleBrand: { type: "STRING" },
+            vehicleModel: { type: "STRING" },
+            vin: { type: "STRING" },
+            interventionType: { type: "STRING", enum: ["mechanical", "bodywork"] },
+            city: { type: "STRING" },
+            preferredDate: { type: "STRING" },
+            preferredSlot: { type: "STRING", enum: ["morning", "afternoon"] },
+            comment: { type: "STRING" },
+            cndpConsent: { type: "BOOLEAN" },
+          },
+          required: ["fullName", "phone", "email", "vehicleBrand", "vehicleModel", "vin", "interventionType", "city", "preferredDate", "preferredSlot", "cndpConsent"],
+        },
+      },
+      {
+        name: "submit_complaint",
+        description: "APV ONLY. Submit the complaint (réclamation) once all required fields are collected and CNDP consent is given.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            fullName: { type: "STRING" },
+            phone: { type: "STRING" },
+            email: { type: "STRING" },
+            vehicleBrand: { type: "STRING" },
+            vehicleModel: { type: "STRING" },
+            vin: { type: "STRING" },
+            interventionType: { type: "STRING", enum: ["mechanical", "bodywork"] },
+            site: { type: "STRING" },
+            serviceDate: { type: "STRING" },
+            reason: { type: "STRING" },
+            attachmentUrl: { type: "STRING" },
+            cndpConsent: { type: "BOOLEAN" },
+          },
+          required: ["fullName", "phone", "email", "vehicleBrand", "vehicleModel", "vin", "interventionType", "site", "reason", "cndpConsent"],
+        },
+      },
     ],
   },
 ];
@@ -466,6 +520,29 @@ export function useRihlaLive(
       return;
     }
 
+    // Defensive resets — guard against any stale state from a previous
+    // session leaking into the new one. Without this, the first connection
+    // after the user navigates back into voice mode could see a leftover
+    // shouldDisconnectRef = true (e.g., from a prior end_call where the
+    // backstop fired) and silently disconnect mid-greeting.
+    shouldDisconnectRef.current = false;
+    isPlayingRef.current = false;
+    playQueueRef.current = [];
+    userBufferRef.current = "";
+    assistantBufferRef.current = "";
+
+    // Pre-warm + resume the audio context now (we're inside a click handler
+    // so browsers will allow it). Doing this here, awaited via the audio
+    // queue's first-chunk path, avoids a silent first-greeting that
+    // otherwise plays into a suspended context.
+    try {
+      const ctx = audioCtxRef.current && audioCtxRef.current.state !== "closed"
+        ? audioCtxRef.current
+        : new AudioContext({ sampleRate: 24000 });
+      audioCtxRef.current = ctx;
+      if (ctx.state === "suspended") void ctx.resume();
+    } catch { /* AudioContext unavailable — non-fatal */ }
+
     updateState("connecting");
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 
@@ -539,8 +616,12 @@ export function useRihlaLive(
       }
       handleMessage(text);
     };
-    ws.onerror = () => updateState("error");
-    ws.onclose = () => {
+    ws.onerror = (ev) => {
+      console.warn("[rihla-live] ws error", ev);
+      updateState("error");
+    };
+    ws.onclose = (ev) => {
+      console.warn(`[rihla-live] ws closed code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean}`);
       updateState("idle");
       stopMic();
     };

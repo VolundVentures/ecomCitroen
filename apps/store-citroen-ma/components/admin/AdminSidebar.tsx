@@ -11,6 +11,8 @@ import {
   Sparkles,
   Settings,
   ChevronDown,
+  Wrench,
+  AlertTriangle,
 } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,10 +29,20 @@ export function AdminSidebar({ slug, brand, brands, accent }: Props) {
   const pathname = usePathname();
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // After-sales sections only show on brands where APV is enabled. Today
+  // that's jeep-ma only — Stellantis will validate the demo before we roll
+  // RDV / complaints out to Citroën and Peugeot KSA.
+  const apvEnabled = slug === "jeep-ma";
   const items = [
     { href: `/admin/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true },
     { href: `/admin/${slug}/conversations`, label: "Conversations", icon: MessagesSquare },
-    { href: `/admin/${slug}/leads`, label: "Leads", icon: Users },
+    { href: `/admin/${slug}/leads`, label: "Sales leads", icon: Users },
+    ...(apvEnabled
+      ? [
+          { href: `/admin/${slug}/appointments`, label: "Appointments", icon: Wrench },
+          { href: `/admin/${slug}/complaints`, label: "Complaints", icon: AlertTriangle },
+        ]
+      : []),
     { href: `/admin/${slug}/analytics`, label: "Analytics", icon: BarChart3 },
     { href: `/admin/${slug}/prompt`, label: "Prompt", icon: Sparkles },
     { href: `/admin/${slug}/settings`, label: "Settings", icon: Settings },

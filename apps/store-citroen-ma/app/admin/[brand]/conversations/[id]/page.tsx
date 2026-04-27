@@ -162,6 +162,51 @@ function MessageBubble({ m }: { m: Message }) {
         </div>
       );
     }
+    if (p.name === "lookup_vin") {
+      const i = (p.input ?? {}) as Record<string, unknown>;
+      return (
+        <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.06] px-3 py-2 text-[12px] text-sky-100/90">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-sky-300/65">VIN lookup</div>
+          <div className="mt-0.5 font-mono text-[11.5px] text-sky-100/85">{String(i.vin ?? "—")}</div>
+        </div>
+      );
+    }
+    if (p.name === "book_service_appointment" || p.name === "submit_complaint") {
+      const i = (p.input ?? {}) as Record<string, unknown>;
+      const isAppt = p.name === "book_service_appointment";
+      const label = isAppt ? "Service appointment submitted" : "Complaint submitted";
+      const tone = isAppt ? "emerald" : "amber";
+      const border = tone === "emerald" ? "border-emerald-500/30" : "border-amber-500/30";
+      const bg = tone === "emerald" ? "bg-emerald-500/10" : "bg-amber-500/10";
+      const tag = tone === "emerald" ? "text-emerald-300/80" : "text-amber-300/80";
+      const subtle = tone === "emerald" ? "text-emerald-300/55" : "text-amber-300/55";
+      const text = tone === "emerald" ? "text-emerald-100/95" : "text-amber-100/95";
+      return (
+        <div className={`rounded-lg border ${border} ${bg} px-3 py-2.5 text-[12px] ${text}`}>
+          <div className={`text-[10px] uppercase tracking-[0.18em] ${tag}`}>{label}</div>
+          <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
+            {typeof i.fullName === "string" && <div><span className={subtle}>Name:</span> {i.fullName}</div>}
+            {typeof i.phone === "string" && <div><span className={subtle}>Phone:</span> <span className="font-mono">{i.phone}</span></div>}
+            {typeof i.email === "string" && <div><span className={subtle}>Email:</span> {i.email}</div>}
+            {typeof i.vehicleBrand === "string" && <div><span className={subtle}>Brand:</span> {i.vehicleBrand}</div>}
+            {typeof i.vehicleModel === "string" && <div><span className={subtle}>Model:</span> {i.vehicleModel}</div>}
+            {typeof i.vin === "string" && <div><span className={subtle}>VIN:</span> <span className="font-mono">{i.vin}</span></div>}
+            {typeof i.interventionType === "string" && <div><span className={subtle}>Type:</span> {i.interventionType}</div>}
+            {isAppt && typeof i.city === "string" && <div><span className={subtle}>City:</span> {i.city}</div>}
+            {isAppt && typeof i.preferredDate === "string" && <div><span className={subtle}>Date:</span> {i.preferredDate}</div>}
+            {isAppt && typeof i.preferredSlot === "string" && <div><span className={subtle}>Slot:</span> {i.preferredSlot}</div>}
+            {!isAppt && typeof i.site === "string" && <div><span className={subtle}>Site:</span> {i.site}</div>}
+            {!isAppt && typeof i.serviceDate === "string" && <div><span className={subtle}>Service date:</span> {i.serviceDate}</div>}
+            {typeof i.cndpConsent === "boolean" && <div><span className={subtle}>CNDP:</span> {i.cndpConsent ? "✓ accepted" : "✗ refused"}</div>}
+          </div>
+          {!isAppt && typeof i.reason === "string" && (
+            <div className="mt-2 border-t border-amber-500/15 pt-2 text-[11.5px] text-amber-100/85 whitespace-pre-wrap">
+              {i.reason}
+            </div>
+          )}
+        </div>
+      );
+    }
     if (p.name === "end_call") {
       return (
         <div className="rounded-lg border border-white/10 bg-white/[0.025] px-3 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/45">

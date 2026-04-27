@@ -22,21 +22,31 @@ import {
   type WidgetBrand,
 } from "@/lib/rihla-actions";
 import { useRihlaLive, type LiveToolCall } from "@/lib/use-rihla-live";
-import { LanguagePicker, getLangConfig, type VoiceLang } from "@/components/rihla/LanguagePicker";
+import { LanguagePicker, getLangConfig, getOpeningGreeting, type VoiceLang } from "@/components/rihla/LanguagePicker";
 import { ModePicker, type Mode } from "@/components/rihla/ModePicker";
 import { CallView } from "@/components/rihla/CallView";
 import { ShowroomCards } from "@/components/rihla/ShowroomCards";
+
+type ApvConfirmationPayload = {
+  kind: "appointment" | "complaint";
+  refNumber: string;
+  ok: boolean;
+  summary: Record<string, string | undefined>;
+  warnings: string[];
+};
 
 type Msg =
   | { kind: "text"; role: "user" | "assistant"; text: string; tools?: Array<{ name: string; input: Record<string, unknown> }> }
   | { kind: "image_card"; role: "assistant"; payload: ImageCardPayload }
   | { kind: "video_card"; role: "assistant"; payload: VideoCardPayload }
-  | { kind: "showrooms"; role: "assistant"; payload: ShowroomsPayload };
+  | { kind: "showrooms"; role: "assistant"; payload: ShowroomsPayload }
+  | { kind: "apv_confirmation"; role: "assistant"; payload: ApvConfirmationPayload };
 
 type StreamEvent =
   | { type: "text"; text: string }
   | { type: "tool"; name: string; input: Record<string, unknown> }
   | { type: "conversation"; id: string }
+  | { type: "apv_confirmation"; kind: "appointment" | "complaint"; refNumber: string; ok: boolean; summary: Record<string, string | undefined>; warnings: string[] }
   | { type: "done" };
 
 type Props = {
@@ -96,11 +106,14 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
   const conversationIdRef = useRef<string | null>(null);
 
   // Inject the assistant greeting on chat stage entry (or after mode pick).
+  // For brands that have APV enabled (jeep-ma) the greeting lists all four
+  // tracks (sales / RDV / info / complaint); for sales-only brands the
+  // existing capability greeting is used.
   useEffect(() => {
     if (stage === "chat" && voiceLang && messages.length === 0 && mode === "chat") {
-      setMessages([{ kind: "text", role: "assistant", text: getLangConfig(voiceLang).greeting }]);
+      setMessages([{ kind: "text", role: "assistant", text: getOpeningGreeting(voiceLang, brand.slug) }]);
     }
-  }, [stage, voiceLang, mode, messages.length]);
+  }, [stage, voiceLang, mode, messages.length, brand.slug]);
 
   // Show greeting teaser briefly when widget loads closed.
   useEffect(() => {
@@ -382,6 +395,18 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
                 return copy;
               });
             }
+          } else if (ev.type === "apv_confirmation") {
+            // Server-side persistence of an appointment / complaint just
+            // completed and gave us a reference number. Render a success
+            // card so the customer can read + screenshot the ref.
+            setMessages((m) => [
+              ...m,
+              {
+                kind: "apv_confirmation",
+                role: "assistant",
+                payload: { kind: ev.kind, refNumber: ev.refNumber, ok: ev.ok, summary: ev.summary, warnings: ev.warnings },
+              },
+            ]);
           }
         }
       }
@@ -638,6 +663,9 @@ function BubblePanel(p: PanelProps) {
                   }
                   if (m.kind === "video_card") {
                     return <VideoCardMsg key={i} payload={m.payload} accent={p.accent} locale={p.voiceLang} />;
+                  }
+                  if (m.kind === "apv_confirmation") {
+                    return <ApvConfirmationCard key={i} payload={m.payload} accent={p.accent} locale={p.voiceLang} />;
                   }
                   if (m.kind === "showrooms") {
                     return (
@@ -1066,6 +1094,145 @@ function VideoCardMsg({
       </div>
     </motion.div>
   );
+}
+
+function ApvConfirmationCard({
+  payload,
+  accent,
+  locale,
+}: {
+  payload: ApvConfirmationPayload;
+  accent: string;
+  locale: VoiceLang | null;
+}) {
+  const labels = apvLabels(locale, payload.kind);
+  const s = payload.summary;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
+      className="flex items-end gap-2"
+    >
+      <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
+        <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
+      </div>
+      <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-bl-md border border-emerald-500/30 bg-emerald-50/95 shadow-[0_1px_3px_rgba(0,0,0,0.05),0_0_0_1px_rgba(16,185,129,0.15)]">
+        <div className="flex items-center gap-2 border-b border-emerald-500/15 bg-emerald-500/[0.05] px-3.5 py-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15" style={{ color: accent }}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+              <path d="M6.5 11.5L3 8l1-1 2.5 2.5L12 4l1 1z" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-emerald-700/85">{labels.title}</div>
+            <div className="font-mono text-[12.5px] font-semibold tracking-tight text-emerald-900">{payload.refNumber}</div>
+          </div>
+        </div>
+        <div className="space-y-0.5 px-3.5 py-2.5 text-[12px] leading-relaxed text-emerald-950/85">
+          {s.fullName && <Row label={labels.name} value={s.fullName} />}
+          {s.phone && <Row label={labels.phone} value={s.phone} mono />}
+          {s.email && <Row label={labels.email} value={s.email} />}
+          {(s.vehicleBrand || s.vehicleModel) && (
+            <Row label={labels.vehicle} value={[s.vehicleBrand, s.vehicleModel].filter(Boolean).join(" ")} />
+          )}
+          {s.vin && <Row label="VIN" value={s.vin} mono />}
+          {s.interventionType && <Row label={labels.intervention} value={s.interventionType === "mechanical" ? labels.mech : labels.body} />}
+          {s.city && <Row label={labels.city} value={s.city} />}
+          {s.preferredDate && <Row label={labels.date} value={s.preferredDate} />}
+          {s.preferredSlot && <Row label={labels.slot} value={s.preferredSlot === "morning" ? labels.morning : labels.afternoon} />}
+          {s.site && <Row label={labels.site} value={s.site} />}
+          {s.serviceDate && <Row label={labels.serviceDate} value={s.serviceDate} />}
+          {s.reason && <Row label={labels.reason} value={s.reason} />}
+        </div>
+        <div className="border-t border-emerald-500/15 bg-emerald-500/[0.03] px-3.5 py-2 text-[11px] leading-snug text-emerald-800/80">
+          {labels.footer}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2">
+      <span className="text-[10.5px] uppercase tracking-[0.14em] text-emerald-800/55">{label}</span>
+      <span className={mono ? "font-mono text-[12px] tabular-nums text-emerald-950" : "text-[12px] text-emerald-950"}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function apvLabels(locale: VoiceLang | null, kind: "appointment" | "complaint") {
+  const isAppt = kind === "appointment";
+  if (locale === "fr") {
+    return {
+      title: isAppt ? "Rendez-vous enregistré" : "Réclamation enregistrée",
+      name: "Nom",
+      phone: "Téléphone",
+      email: "E-mail",
+      vehicle: "Véhicule",
+      intervention: "Intervention",
+      mech: "Mécanique",
+      body: "Carrosserie",
+      city: "Ville",
+      date: "Date",
+      slot: "Créneau",
+      morning: "Matin",
+      afternoon: "Après-midi",
+      site: "Atelier",
+      serviceDate: "Date d'intervention",
+      reason: "Motif",
+      footer: isAppt
+        ? "Un conseiller vous contactera sous 24h ouvrées pour confirmer le créneau."
+        : "Le Centre de Relation Client vous recontactera sous 48h ouvrées.",
+    };
+  }
+  if (locale === "ar" || locale === "darija") {
+    return {
+      title: isAppt ? "تم تسجيل الموعد" : "تم تسجيل الشكوى",
+      name: "الاسم",
+      phone: "الهاتف",
+      email: "البريد الإلكتروني",
+      vehicle: "السيارة",
+      intervention: "نوع التدخل",
+      mech: "ميكانيك",
+      body: "صفائح",
+      city: "المدينة",
+      date: "التاريخ",
+      slot: "الفترة",
+      morning: "صباحاً",
+      afternoon: "بعد الظهر",
+      site: "الورشة",
+      serviceDate: "تاريخ التدخل",
+      reason: "السبب",
+      footer: isAppt
+        ? "سيتواصل معكم مستشار خلال 24 ساعة عمل لتأكيد الموعد."
+        : "سيتواصل معكم مركز خدمة العملاء خلال 48 ساعة عمل.",
+    };
+  }
+  return {
+    title: isAppt ? "Appointment received" : "Complaint received",
+    name: "Name",
+    phone: "Phone",
+    email: "Email",
+    vehicle: "Vehicle",
+    intervention: "Intervention",
+    mech: "Mechanical",
+    body: "Bodywork",
+    city: "City",
+    date: "Date",
+    slot: "Slot",
+    morning: "Morning",
+    afternoon: "Afternoon",
+    site: "Site",
+    serviceDate: "Service date",
+    reason: "Reason",
+    footer: isAppt
+      ? "An advisor will reach out within 24 working hours to confirm your slot."
+      : "Our Customer Relations Centre will get back to you within 48 working hours.",
+  };
 }
 
 function defaultViewSiteLabel(locale: VoiceLang | null): string {

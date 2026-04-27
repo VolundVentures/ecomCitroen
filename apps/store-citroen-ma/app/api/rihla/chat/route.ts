@@ -10,9 +10,17 @@ import {
   recordToolCall,
   updateFunnelCheckpoints,
   captureLeadFromBooking,
+  createServiceAppointment,
+  createComplaint,
   closeConversation,
 } from "@/lib/persistence";
 import { validatePhone, normalizePhone } from "@/lib/phone";
+import { validateEmail } from "@/lib/email";
+import { validateVin, normalizeVin } from "@/lib/vin";
+import { validateAppointmentDate, validateServiceDate } from "@/lib/dates";
+import { lookupVin } from "@/lib/vin-lookup";
+import { nextRefNumber } from "@/lib/reference-number";
+import { adminClient } from "@/lib/supabase/admin";
 import type { Locale } from "@/lib/supabase/database.types";
 
 export const runtime = "nodejs";
@@ -247,6 +255,57 @@ const GEMINI_NAV_TOOLS: Tool[] = [
           "End the conversation. Call this IMMEDIATELY after your farewell phrase when: (1) a booking is confirmed, (2) the user EXPLICITLY says goodbye in any language ('bye', 'au revoir', 'مع السلامة', 'بسلامة'), or (3) the user clearly refuses to continue twice. DO NOT call end_call on a bare 'thanks' or 'merci' — the user is just being polite, keep going.",
         parameters: { type: Type.OBJECT, properties: {} },
       },
+      // ─── APV (after-sales) — Jeep widget only. Never invoke for other brands. ───
+      // VIN lookup is done SERVER-SIDE via regex pre-extraction on the user's
+      // message — when a VIN is present, the result is injected into the
+      // system prompt as a VIN PREFILL block. The model never calls a
+      // lookup tool, which keeps the turn loop simple and avoids the
+      // "model emits tool call, waits for a response that never arrives"
+      // hang we saw in QA.
+      {
+        name: "book_service_appointment",
+        description: "APV ONLY. Submit a service-appointment (RDV) request once you've collected ALL required fields and the customer has explicitly given CNDP consent. Server validates everything, persists the row, and returns a reference number you announce to the customer.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            fullName: { type: Type.STRING, description: "Full name (first + last). Min 2 words, 3-80 chars." },
+            phone: { type: Type.STRING, description: "Mobile, MA format. We normalize server-side." },
+            email: { type: Type.STRING, description: "Standard email format." },
+            vehicleBrand: { type: Type.STRING, description: "One of: Peugeot, Citroën, Jeep, Alfa Romeo, DS, Fiat, Leapmotor, Spoticar." },
+            vehicleModel: { type: Type.STRING, description: "Model name." },
+            vin: { type: Type.STRING, description: "17 chars, alphanumeric, no I/O/Q." },
+            interventionType: { type: Type.STRING, enum: ["mechanical", "bodywork"], description: "mechanical = mécanique; bodywork = carrosserie." },
+            city: { type: Type.STRING, description: "City for the appointment." },
+            preferredDate: { type: Type.STRING, description: "ISO yyyy-mm-dd OR DD/MM/YYYY. Must be J+1 to J+30, no Sundays / public holidays." },
+            preferredSlot: { type: Type.STRING, enum: ["morning", "afternoon"] },
+            comment: { type: Type.STRING, description: "Optional free-text comment (symptom, context). Max 500 chars." },
+            cndpConsent: { type: Type.BOOLEAN, description: "MUST be true. Set after the customer explicitly accepted the CNDP consent statement." },
+          },
+          required: ["fullName", "phone", "email", "vehicleBrand", "vehicleModel", "vin", "interventionType", "city", "preferredDate", "preferredSlot", "cndpConsent"],
+        },
+      },
+      {
+        name: "submit_complaint",
+        description: "APV ONLY. Submit a complaint (réclamation) once all required fields are collected and CNDP consent is given. Server validates, persists, returns ticket reference. The CRC will then qualify and route to the concerned site.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            fullName: { type: Type.STRING },
+            phone: { type: Type.STRING },
+            email: { type: Type.STRING },
+            vehicleBrand: { type: Type.STRING },
+            vehicleModel: { type: Type.STRING },
+            vin: { type: Type.STRING },
+            interventionType: { type: Type.STRING, enum: ["mechanical", "bodywork"] },
+            site: { type: Type.STRING, description: "Atelier / city where the complained-about intervention happened." },
+            serviceDate: { type: Type.STRING, description: "Optional. ISO date or DD/MM/YYYY of the original intervention. Must be ≤ today and ≥ today-180 days." },
+            reason: { type: Type.STRING, description: "Free-text complaint reason. 20-1000 characters required." },
+            attachmentUrl: { type: Type.STRING, description: "Optional. URL to a customer-uploaded photo / PDF." },
+            cndpConsent: { type: Type.BOOLEAN, description: "MUST be true. Set after the customer explicitly accepted the CNDP consent statement." },
+          },
+          required: ["fullName", "phone", "email", "vehicleBrand", "vehicleModel", "vin", "interventionType", "site", "reason", "cndpConsent"],
+        },
+      },
     ],
   },
 ];
@@ -267,6 +326,9 @@ const ANTHROPIC_NAV_TOOLS: Anthropic.Messages.Tool[] = [
   { name: "book_showroom_visit", description: "Schedule a showroom visit (user wants to see cars in person). Pass showroomName when the customer chose one.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const }, showroomName: { type: "string" as const } }, required: ["firstName", "phone"] } },
   { name: "find_showrooms", description: "List nearby showrooms when the user names a city or asks where to visit. Renders cards with addresses + phones.", input_schema: { type: "object" as const, properties: { city: { type: "string" as const } }, required: [] } },
   { name: "end_call", description: "End the conversation right after a farewell phrase. DO NOT call on a bare 'thanks' — only on explicit goodbye phrases.", input_schema: { type: "object" as const, properties: {}, required: [] } },
+  // APV — Jeep widget only. (VIN lookup is server-side; no tool needed.)
+  { name: "book_service_appointment", description: "APV ONLY. Submit a service-appointment after all fields collected + CNDP consent.", input_schema: { type: "object" as const, properties: { fullName: { type: "string" as const }, phone: { type: "string" as const }, email: { type: "string" as const }, vehicleBrand: { type: "string" as const }, vehicleModel: { type: "string" as const }, vin: { type: "string" as const }, interventionType: { type: "string" as const, enum: ["mechanical", "bodywork"] }, city: { type: "string" as const }, preferredDate: { type: "string" as const }, preferredSlot: { type: "string" as const, enum: ["morning", "afternoon"] }, comment: { type: "string" as const }, cndpConsent: { type: "boolean" as const } }, required: ["fullName", "phone", "email", "vehicleBrand", "vehicleModel", "vin", "interventionType", "city", "preferredDate", "preferredSlot", "cndpConsent"] } },
+  { name: "submit_complaint", description: "APV ONLY. Submit a complaint after fields collected + CNDP consent.", input_schema: { type: "object" as const, properties: { fullName: { type: "string" as const }, phone: { type: "string" as const }, email: { type: "string" as const }, vehicleBrand: { type: "string" as const }, vehicleModel: { type: "string" as const }, vin: { type: "string" as const }, interventionType: { type: "string" as const, enum: ["mechanical", "bodywork"] }, site: { type: "string" as const }, serviceDate: { type: "string" as const }, reason: { type: "string" as const }, attachmentUrl: { type: "string" as const }, cndpConsent: { type: "boolean" as const } }, required: ["fullName", "phone", "email", "vehicleBrand", "vehicleModel", "vin", "interventionType", "site", "reason", "cndpConsent"] } },
 ];
 
 /* ─────────────────────────── System prompt build ─────────────────────────── */
@@ -516,6 +578,178 @@ async function streamWithAnthropic(
   }
 }
 
+/* ─────────────────── APV persistence helpers ─────────────────── */
+
+type ApvPersistResult = {
+  ok: boolean;
+  refNumber: string;
+  summary: Record<string, string | undefined>;
+  warnings: string[];
+};
+
+async function persistAppointment(args: {
+  brandSlug: string;
+  conversationId: string | null;
+  input: Record<string, unknown>;
+}): Promise<ApvPersistResult> {
+  const i = args.input;
+  const warnings: string[] = [];
+
+  // Resolve brand_id once for ref number generation.
+  let brandId = "";
+  try {
+    const supa = adminClient();
+    const { data } = await supa.from("brands").select("id").eq("slug", args.brandSlug).single();
+    brandId = (data as unknown as { id?: string } | null)?.id ?? "";
+  } catch { /* offline */ }
+
+  const refNumber = brandId
+    ? await nextRefNumber({ brandId, kind: "RDV" })
+    : `RDV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 999).toString().padStart(3, "0")}`;
+
+  const phoneRaw = String(i.phone ?? "");
+  const phone = validatePhone(phoneRaw, "MA");
+  if (!phone.ok) warnings.push(`phone-format: ${phone.reason ?? "?"}`);
+  const phoneFinal = phone.ok ? phone.canonical : normalizePhone(phoneRaw, "MA");
+
+  const email = validateEmail(String(i.email ?? ""));
+  if (!email.ok) warnings.push(`email-format: ${email.reason ?? "?"}`);
+  const emailFinal = email.ok ? email.canonical : String(i.email ?? "");
+
+  const vin = validateVin(String(i.vin ?? ""));
+  if (!vin.ok) warnings.push(`vin-format: ${vin.reason ?? "?"}`);
+  const vinFinal = vin.ok ? vin.canonical : normalizeVin(String(i.vin ?? ""));
+
+  const date = validateAppointmentDate(String(i.preferredDate ?? ""));
+  if (!date.ok) warnings.push(`date-${date.reason ?? "?"}`);
+  const dateFinal = date.canonical || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const intervention = String(i.interventionType ?? "mechanical") as "mechanical" | "bodywork";
+  const slot = String(i.preferredSlot ?? "morning") as "morning" | "afternoon";
+  const cndp = i.cndpConsent === true;
+  if (!cndp) warnings.push("cndp-missing");
+
+  const persisted = await createServiceAppointment({
+    brandSlug: args.brandSlug,
+    conversationId: args.conversationId,
+    refNumber,
+    fullName: String(i.fullName ?? ""),
+    phone: phoneFinal,
+    email: emailFinal,
+    vehicleBrand: String(i.vehicleBrand ?? ""),
+    vehicleModel: String(i.vehicleModel ?? ""),
+    vin: vinFinal,
+    interventionType: intervention,
+    city: String(i.city ?? ""),
+    preferredDate: dateFinal,
+    preferredSlot: slot,
+    comment: typeof i.comment === "string" ? i.comment : undefined,
+    cndpConsentAt: new Date().toISOString(),
+    notes: warnings.length > 0 ? `validation-warnings: ${warnings.join(" · ")}` : undefined,
+  });
+
+  return {
+    ok: !!persisted,
+    refNumber: persisted?.refNumber ?? refNumber,
+    summary: {
+      fullName: String(i.fullName ?? ""),
+      phone: phoneFinal,
+      email: emailFinal,
+      vehicleBrand: String(i.vehicleBrand ?? ""),
+      vehicleModel: String(i.vehicleModel ?? ""),
+      vin: vinFinal,
+      interventionType: intervention,
+      city: String(i.city ?? ""),
+      preferredDate: dateFinal,
+      preferredSlot: slot,
+    },
+    warnings,
+  };
+}
+
+async function persistComplaint(args: {
+  brandSlug: string;
+  conversationId: string | null;
+  input: Record<string, unknown>;
+}): Promise<ApvPersistResult> {
+  const i = args.input;
+  const warnings: string[] = [];
+
+  let brandId = "";
+  try {
+    const supa = adminClient();
+    const { data } = await supa.from("brands").select("id").eq("slug", args.brandSlug).single();
+    brandId = (data as unknown as { id?: string } | null)?.id ?? "";
+  } catch { /* offline */ }
+
+  const refNumber = brandId
+    ? await nextRefNumber({ brandId, kind: "REL" })
+    : `REL-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 999).toString().padStart(3, "0")}`;
+
+  const phone = validatePhone(String(i.phone ?? ""), "MA");
+  if (!phone.ok) warnings.push(`phone-format: ${phone.reason ?? "?"}`);
+  const phoneFinal = phone.ok ? phone.canonical : normalizePhone(String(i.phone ?? ""), "MA");
+
+  const email = validateEmail(String(i.email ?? ""));
+  if (!email.ok) warnings.push(`email-format: ${email.reason ?? "?"}`);
+  const emailFinal = email.ok ? email.canonical : String(i.email ?? "");
+
+  const vin = validateVin(String(i.vin ?? ""));
+  if (!vin.ok) warnings.push(`vin-format: ${vin.reason ?? "?"}`);
+  const vinFinal = vin.ok ? vin.canonical : normalizeVin(String(i.vin ?? ""));
+
+  let serviceDateFinal: string | null = null;
+  if (typeof i.serviceDate === "string" && i.serviceDate.trim()) {
+    const sd = validateServiceDate(i.serviceDate);
+    if (!sd.ok) warnings.push(`service-date-${sd.reason ?? "?"}`);
+    serviceDateFinal = sd.canonical || null;
+  }
+
+  const reason = String(i.reason ?? "").trim();
+  if (reason.length < 20) warnings.push("reason-too-short");
+
+  const intervention = String(i.interventionType ?? "mechanical") as "mechanical" | "bodywork";
+  const cndp = i.cndpConsent === true;
+  if (!cndp) warnings.push("cndp-missing");
+
+  const persisted = await createComplaint({
+    brandSlug: args.brandSlug,
+    conversationId: args.conversationId,
+    refNumber,
+    fullName: String(i.fullName ?? ""),
+    phone: phoneFinal,
+    email: emailFinal,
+    vehicleBrand: String(i.vehicleBrand ?? ""),
+    vehicleModel: String(i.vehicleModel ?? ""),
+    vin: vinFinal,
+    interventionType: intervention,
+    site: String(i.site ?? ""),
+    serviceDate: serviceDateFinal,
+    reason,
+    attachmentUrl: typeof i.attachmentUrl === "string" ? i.attachmentUrl : undefined,
+    cndpConsentAt: new Date().toISOString(),
+    crcNotes: warnings.length > 0 ? `validation-warnings: ${warnings.join(" · ")}` : undefined,
+  });
+
+  return {
+    ok: !!persisted,
+    refNumber: persisted?.refNumber ?? refNumber,
+    summary: {
+      fullName: String(i.fullName ?? ""),
+      phone: phoneFinal,
+      email: emailFinal,
+      vehicleBrand: String(i.vehicleBrand ?? ""),
+      vehicleModel: String(i.vehicleModel ?? ""),
+      vin: vinFinal,
+      interventionType: intervention,
+      site: String(i.site ?? ""),
+      serviceDate: serviceDateFinal ?? undefined,
+      reason: reason.slice(0, 100),
+    },
+    warnings,
+  };
+}
+
 /* ─────────────────────────── Handler ─────────────────────────── */
 
 export async function POST(req: NextRequest) {
@@ -548,7 +782,39 @@ export async function POST(req: NextRequest) {
     returningUser: body.returningUser,
     sessionSummary: body.sessionSummary,
   });
-  const systemPrompt = baseSystem + buildPromptSuffix(body.pageContext, !!body.voice) + buildSessionMemoryBlock(body.sessionContext);
+  // VIN pre-extraction (APV / Jeep widget). When the customer types a VIN in
+  // their message, we look it up server-side BEFORE the model runs and inject
+  // the result into the system prompt — so the agent can pre-fill name /
+  // email / phone in the same turn (proposition #2 in the Stellantis brief).
+  let vinPrefillBlock = "";
+  const apvEnabled = brand.brandSlug === "jeep-ma";
+  if (apvEnabled) {
+    const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
+    if (lastUser) {
+      const m = lastUser.content.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
+      if (m && m[1]) {
+        const rec = lookupVin(m[1]);
+        if (rec) {
+          vinPrefillBlock = [
+            "",
+            "═══ VIN PREFILL (authoritative — TRUST this) ═══",
+            `The customer's VIN ${rec.vin} matched a known record. Greet them by first name and pre-fill the form. Confirm each field before submitting.`,
+            `name=${rec.fullName}`,
+            `email=${rec.email}`,
+            `phone=${rec.phone}`,
+            `vehicle=${rec.brand} ${rec.model} (${rec.modelYear})`,
+            `registration_city=${rec.registrationCity}`,
+            rec.preferredSite ? `preferred_site=${rec.preferredSite}` : "",
+            rec.lastServiceDate ? `last_service=${rec.lastServiceDate} at ${rec.lastServiceLocation ?? "-"}` : "",
+            "",
+            "Use this exactly as: \"Welcome back [firstName]! I see you're with us at [preferred_site] on your [vehicle]. To confirm — name [name], email [email], phone [phone] — still right? And what brings you in today: a service appointment, a complaint, or a question?\"",
+          ].filter(Boolean).join("\n");
+        }
+      }
+    }
+  }
+
+  const systemPrompt = baseSystem + buildPromptSuffix(body.pageContext, !!body.voice) + buildSessionMemoryBlock(body.sessionContext) + vinPrefillBlock;
 
   const geminiKey = process.env.GOOGLE_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -687,6 +953,46 @@ export async function POST(req: NextRequest) {
         } else {
           await streamWithAnthropic(tap, encoder, systemPrompt, body.messages);
         }
+
+        // APV inline persistence — book_service_appointment / submit_complaint
+        // need to land in the DB BEFORE we close the stream so we can emit the
+        // generated reference number to the client in the same response. The
+        // alternative (fire-and-forget like the rest) leaves the customer
+        // staring at "submitting…" with no ref number.
+        if (apvEnabled && body.brandSlug) {
+          for (const t of collectedTools) {
+            if (t.name === "book_service_appointment") {
+              const result = await persistAppointment({
+                brandSlug: body.brandSlug,
+                conversationId,
+                input: t.input,
+              });
+              emit(controller, encoder, {
+                type: "apv_confirmation",
+                kind: "appointment",
+                refNumber: result.refNumber,
+                ok: result.ok,
+                summary: result.summary,
+                warnings: result.warnings,
+              });
+            } else if (t.name === "submit_complaint") {
+              const result = await persistComplaint({
+                brandSlug: body.brandSlug,
+                conversationId,
+                input: t.input,
+              });
+              emit(controller, encoder, {
+                type: "apv_confirmation",
+                kind: "complaint",
+                refNumber: result.refNumber,
+                ok: result.ok,
+                summary: result.summary,
+                warnings: result.warnings,
+              });
+            }
+          }
+        }
+
         emit(controller, encoder, { type: "done" });
         controller.close();
       } catch (err) {
