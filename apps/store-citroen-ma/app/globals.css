@@ -102,14 +102,16 @@ html[lang="ar"] body {
   font-family: var(--font-arabic);
 }
 
-h1, h2, h3, h4 {
-  font-family: var(--font-display);
-  letter-spacing: -0.035em;
-  font-weight: 500;
-  color: inherit;
-}
+@layer base {
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.035em;
+    font-weight: 500;
+    color: inherit;
+  }
 
-h1 { font-weight: 500; }
+  h1 { font-weight: 500; }
+}
 
 /* ─── Display utility ─────────────────────────────────── */
 .display {

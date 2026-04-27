@@ -616,12 +616,15 @@ function BubblePanel(p: PanelProps) {
         currentImage={p.callImage}
         typeRequest={p.typeRequest}
         onSendText={(t) => {
-          // Send to Gemini Live so Rihla hears it, AND surface it in the
-          // session's transcript bus so it persists as a user_text message.
-          p.live.sendText(t);
-          // The hook's transcript callback handles user-side rendering for
-          // chat mode; for voice we explicitly fire the same event so the
-          // detail page transcript shows the typed turn.
+          // Send to Gemini Live with a [FIELD_TYPED] marker so the model can
+          // distinguish typed input (canonical, accept verbatim) from voice
+          // dictation (unreliable for names / phones / emails / VINs — agent
+          // should refuse and re-ask the customer to type). The marker is
+          // documented in the APV chassis-first override block of the voice
+          // system prompt.
+          p.live.sendText(`[FIELD_TYPED] ${t}`);
+          // The on-screen transcript and DB persistence use the clean text —
+          // never surface the marker to the user.
           p.live.notifyUserText?.(t);
         }}
       />
@@ -864,28 +867,68 @@ function detectTypeRequest(
   lang: VoiceLang | null
 ): { snippet: string; placeholder?: string } | null {
   const lower = chunk.toLowerCase();
-  // Phone-number triggers (more specific than name).
-  const phoneMatchers = [
+  // VIN / chassis triggers — highest priority, since voice dictation of a 17-char
+  // alphanumeric run is unreliable. Pop the keyboard so the customer can type
+  // it accurately. Fires on any mention of "châssis", "VIN", or "chassis number"
+  // in FR / AR / Darija / EN.
+  const vinMatchers = [
+    /\b(vin|ch[aâ]ssis|chassis)\b/i,
+    /num[ée]ro\s+de\s+ch[aâ]ssis/i,
+    /chassis\s+number/i,
+    /(الشاسيه|الشاسي|الشاصي|شاسيه|شاسي|شاصي|الهيكل)/,
+  ];
+  for (const re of vinMatchers) {
+    if (re.test(chunk)) {
+      return { snippet: chunk.slice(0, 60), placeholder: vinPlaceholder(lang) };
+    }
+  }
+  // Email triggers — pop the keyboard with an email-shaped placeholder.
+  const emailMatchers = [
+    /\b(e-?mail|courriel|adresse\s+e-?mail)\b/i,
+    /(البريد\s*الإلكتروني|الإيميل|إيميلك|بريدك)/,
+  ];
+  for (const re of emailMatchers) {
+    if (re.test(chunk)) {
+      return { snippet: chunk.slice(0, 60), placeholder: emailPlaceholder(lang) };
+    }
+  }
+  // Phone-number triggers (more specific than name). Two tiers:
+  //   STRICT — explicit "type / tape / écrivez / اكتب" verb + field word.
+  //   LOOSE  — any mention of phone / number, since voice flows often skip the
+  //            verb ("Et votre numéro ?"). Keyboard auto-popping a moment too
+  //            early is far less annoying than the customer trying to dictate
+  //            12 digits over a noisy line.
+  const phoneStrict = [
     /type[^.?!]{0,30}\b(phone|number|mobile|whatsapp)\b/i,
     /tape[zr]?[^.?!]{0,30}\b(num[ée]ro|t[ée]l[ée]phone|portable|whatsapp)\b/i,
     /[éeè]criv[a-z]*[^.?!]{0,30}\b(num[ée]ro|t[ée]l[ée]phone|portable)\b/i,
     /اكتب[^.?!]{0,30}(رقم|الجوال|الهاتف|واتساب)/,
     /كتب[^.?!]{0,30}(رقم|الهاتف|الواتساب)/,
   ];
-  for (const re of phoneMatchers) {
+  const phoneLoose = [
+    /\b(num[ée]ro\s+(?:de\s+)?(?:t[ée]l[ée]phone|portable|mobile|whatsapp)|t[ée]l[ée]phone\s+mobile)\b/i,
+    /\b(phone\s+number|mobile\s+number|whatsapp\s+number)\b/i,
+    /(رقم\s*(?:الهاتف|الجوال|الموبايل|الواتساب|الفون)|نمرتك|نمرة\s*الهاتف|نيمرو\s*ديالك)/,
+  ];
+  for (const re of [...phoneStrict, ...phoneLoose]) {
     if (re.test(chunk)) {
       return { snippet: chunk.slice(0, 60), placeholder: phonePlaceholder(lang) };
     }
   }
-  // Name triggers.
-  const nameMatchers = [
+  // Name triggers — same two-tier strategy.
+  const nameStrict = [
     /type[^.?!]{0,30}\b(first\s*name|name)\b/i,
     /tape[zr]?[^.?!]{0,30}\b(pr[ée]nom|nom)\b/i,
     /[éeè]criv[a-z]*[^.?!]{0,30}\b(pr[ée]nom|nom)\b/i,
     /اكتب[^.?!]{0,30}(اسم|الاسم)/,
     /كتب[^.?!]{0,30}(سميتك|اسمك)/,
   ];
-  for (const re of nameMatchers) {
+  const nameLoose = [
+    /\b(votre\s+(?:nom\s+complet|nom|pr[ée]nom)|nom\s+complet)\b/i,
+    /\b(your\s+(?:full\s+)?name|first\s+name|last\s+name)\b/i,
+    /(اسمك\s*الكامل|الاسم\s*الكامل|سميتك|اسمك)/,
+  ];
+  for (const re of [...nameStrict, ...nameLoose]) {
     if (re.test(chunk)) {
       return { snippet: chunk.slice(0, 60), placeholder: namePlaceholder(lang) };
     }
@@ -907,6 +950,18 @@ function phonePlaceholder(lang: VoiceLang | null): string {
   if (lang === "ar" || lang === "darija") return "اكتب رقمك…";
   if (lang === "en") return "Type your phone number…";
   return "Tapez votre numéro…";
+}
+
+function vinPlaceholder(lang: VoiceLang | null): string {
+  if (lang === "ar" || lang === "darija") return "اكتب رقم الشاسيه (17 حرف)…";
+  if (lang === "en") return "Type your VIN (17 chars)…";
+  return "Tapez le numéro de châssis (17 caractères)…";
+}
+
+function emailPlaceholder(lang: VoiceLang | null): string {
+  if (lang === "ar" || lang === "darija") return "اكتب بريدك الإلكتروني…";
+  if (lang === "en") return "Type your email…";
+  return "Tapez votre adresse e-mail…";
 }
 
 function teaserText(lang: VoiceLang | null, brandFirstWord: string): string {
@@ -1017,7 +1072,7 @@ function ImageCardMsg({
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.32, ease: [0.22, 0.68, 0, 1] }}
-      className="flex items-end gap-2"
+      className="flex w-full items-end gap-2"
     >
       <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
         <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
@@ -1075,13 +1130,15 @@ function VideoCardMsg({
       <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full ring-2 ring-white shadow-sm">
         <Image src="/brand/rihla-avatar.jpg" alt="" fill sizes="28px" className="object-cover" />
       </div>
-      <div className="min-w-0 max-w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.05)]">
-        <div className="relative aspect-video w-full overflow-hidden bg-black">
+      <div className="min-w-0 w-full max-w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.05)]">
+        <div className="relative aspect-[16/10] w-full overflow-hidden bg-black">
           <video
             src={payload.videoUrl}
             poster={payload.poster}
             controls
             playsInline
+            autoPlay
+            muted
             preload="metadata"
             className="absolute inset-0 h-full w-full object-cover"
           />

@@ -2,6 +2,7 @@
 // All functions are best-effort — a Supabase outage must not break the agent.
 
 import { adminClient } from "@/lib/supabase/admin";
+import { submitJeepTestDriveLead } from "@/lib/salesforce";
 import type {
   Conversation,
   Channel,
@@ -231,6 +232,34 @@ export async function captureLeadFromBooking(args: {
     if (args.showroomName) convUpdate.lead_showroom = args.showroomName;
     await (supa.from("conversations") as any).update(convUpdate).eq("id", args.conversationId);
   } catch { /* swallow */ }
+
+  // Salesforce sync — Jeep only. Fire-and-forget so a slow / failing Stellantis
+  // CRM never blocks the user-facing booking confirmation. Logged either way
+  // so dev can see the result in the server terminal.
+  if (args.brandSlug === "jeep-ma") {
+    void (async () => {
+      try {
+        const result = await submitJeepTestDriveLead({
+          firstName: args.firstName,
+          phone: args.phone,
+          city: args.city,
+          modelSlug: args.modelSlug,
+          preferredSlot: args.preferredSlot,
+          showroom: args.showroomName,
+          conversationId: args.conversationId,
+        });
+        console.log(
+          `[salesforce] ✓ Jeep lead synced to Stellantis CRM: id=${result.id} firstName=${args.firstName} model=${args.modelSlug} (conv=${args.conversationId})`
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(
+          `[salesforce] ✗ Jeep lead push failed for firstName=${args.firstName} phone=${args.phone}:`,
+          msg
+        );
+      }
+    })();
+  }
 }
 
 /* ─────────────────── APV (after-sales) persistence ─────────────────── */

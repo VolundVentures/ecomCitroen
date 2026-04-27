@@ -376,6 +376,39 @@ function buildPromptSuffix(
   return parts.join("\n");
 }
 
+/* ─────────────────── APV chassis-first runtime override ─────────────────── */
+// Authoritative override appended to the system prompt for the Jeep widget.
+// Lives in code (not the DB-stored prompt) so the chassis-first flow works
+// even before `pnpm tsx scripts/refresh-prompts.ts` has been run, and so it
+// always wins against an older prompt version still cached in Supabase.
+function buildApvOverrideBlock(): string {
+  return [
+    "",
+    "═══ APV CHASSIS-FIRST OVERRIDE (authoritative — overrides any prior APV instructions) ═══",
+    "",
+    "When the customer's intent is RDV (service appointment / rendez-vous / atelier / révision / vidange / mécanique / carrosserie) OR Réclamation (complaint / problème / mécontent), the FIRST AND ONLY question on the next turn is the chassis number (numéro de châssis / VIN). NEVER ask for name, phone, email, brand or model before the chassis number — the CRC system pre-fills those from the VIN.",
+    "",
+    "EXACT FIRST QUESTION (pick one matching the customer's language):",
+    "- FR: \"Bien sûr. Pour aller vite, pouvez-vous me donner le numéro de châssis (VIN) de votre véhicule ? Il est sur la carte grise — 17 caractères.\"",
+    "- AR: \"بكل سرور. لتسريع الأمور، هل يمكنكم إعطائي رقم الشاسيه (VIN) لمركبتكم ؟ يوجد على البطاقة الرمادية — 17 حرفًا.\"",
+    "- Darija: \"واخا. باش نمشيو بزربة، عافاك عطيني نيمرو دالشاسي (VIN) ديال الطوموبيل ديالك. كاين فالكارط كريز — 17 حرف.\"",
+    "- EN: \"Of course. To move quickly, could you share your vehicle's chassis number (VIN)? It's on your registration card — 17 characters.\"",
+    "",
+    "WHEN THE CUSTOMER REPLIES WITH A 17-CHAR VIN:",
+    "  • If a \"VIN PREFILL\" block appears in this prompt → the chassis WAS recognized. Greet by first_name in the customer's language and confirm full_name + phone + email + vehicle (and preferred_site if present) in ONE warm sentence. Then ask intervention type (mécanique / carrosserie). DO NOT re-ask name / phone / email / brand / model.",
+    "  • If NO VIN PREFILL block follows → the chassis is not in our records. Say (FR): \"Je n'arrive pas à retrouver votre dossier avec ce numéro — peut-être un véhicule récemment acquis. Pas de souci, je vais vous demander quelques informations rapidement.\" Then collect: full name → mobile → email → confirm Jeep + model — ONE per turn.",
+    "  • If the VIN looks malformed (≠17 chars or contains I/O/Q) → ask once: \"Le numéro de châssis doit faire 17 caractères, sans I, O ni Q — il est sur la carte grise. Pouvez-vous vérifier ?\" Second failure → fall back to manual collection.",
+    "",
+    "AFTER THE OWNER IS IDENTIFIED (prefilled OR collected manually), continue ONE field per turn:",
+    "  intervention type → city (or site for complaint) → preferred date (RDV only) → preferred slot (RDV only) → optional comment / reason → CNDP recap → tool call.",
+    "",
+    "FORBIDDEN PHRASES — never reply with any of these as a final answer:",
+    "- \"Je n'arrive pas à trouver votre voiture / véhicule\" (without offering the manual fallback)",
+    "- \"VIN inconnu\" / \"chassis introuvable\" without proposing the next step",
+    "- Any variant that leaves the customer with no next action.",
+  ].join("\n");
+}
+
 /* ─────────────────── Fast-path intent detector ───────────────────────── */
 // Gemini's tool calling is unreliable in Arabic. This catches common action
 // patterns and emits tool calls directly, so the LLM only needs to generate
@@ -788,18 +821,29 @@ export async function POST(req: NextRequest) {
   // email / phone in the same turn (proposition #2 in the Stellantis brief).
   let vinPrefillBlock = "";
   const apvEnabled = brand.brandSlug === "jeep-ma";
+  if (!apvEnabled && body.brandSlug === "jeep-ma") {
+    console.warn(`[chat] APV expected for jeep-ma but brand context resolved to ${brand.brandSlug} (Supabase miss?). VIN prefill DISABLED.`);
+  }
   if (apvEnabled) {
     const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
     if (lastUser) {
       const m = lastUser.content.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
-      if (m && m[1]) {
+      if (!m) {
+        console.log(`[chat] APV: no 17-char VIN pattern in last user msg "${lastUser.content.slice(0, 60)}"`);
+      } else if (m[1]) {
         const rec = lookupVin(m[1]);
+        if (!rec) {
+          console.warn(`[chat] APV: VIN ${m[1]} extracted but NOT FOUND in mock CRC db (lib/vin-lookup.ts). Agent will go to manual fallback.`);
+        }
         if (rec) {
+          console.log(`[chat] APV: VIN PREFILL hit ${rec.vin} → ${rec.fullName} (${rec.brand} ${rec.model})`);
+          const firstName = rec.fullName.split(/\s+/)[0] ?? rec.fullName;
           vinPrefillBlock = [
             "",
-            "═══ VIN PREFILL (authoritative — TRUST this) ═══",
-            `The customer's VIN ${rec.vin} matched a known record. Greet them by first name and pre-fill the form. Confirm each field before submitting.`,
-            `name=${rec.fullName}`,
+            "═══ VIN PREFILL (authoritative — TRUST this, mock CRC lookup) ═══",
+            `The customer's chassis number ${rec.vin} matched a known owner in the CRC database. Use these exact values — DO NOT re-ask, DO NOT invent.`,
+            `first_name=${firstName}`,
+            `full_name=${rec.fullName}`,
             `email=${rec.email}`,
             `phone=${rec.phone}`,
             `vehicle=${rec.brand} ${rec.model} (${rec.modelYear})`,
@@ -807,14 +851,15 @@ export async function POST(req: NextRequest) {
             rec.preferredSite ? `preferred_site=${rec.preferredSite}` : "",
             rec.lastServiceDate ? `last_service=${rec.lastServiceDate} at ${rec.lastServiceLocation ?? "-"}` : "",
             "",
-            "Use this exactly as: \"Welcome back [firstName]! I see you're with us at [preferred_site] on your [vehicle]. To confirm — name [name], email [email], phone [phone] — still right? And what brings you in today: a service appointment, a complaint, or a question?\"",
+            "Greet by first_name in the customer's language and confirm full_name + phone + email + vehicle (and preferred_site if present) in ONE warm sentence, then proceed straight to the next missing field per the APV TRACK A / C flow.",
           ].filter(Boolean).join("\n");
         }
       }
     }
   }
 
-  const systemPrompt = baseSystem + buildPromptSuffix(body.pageContext, !!body.voice) + buildSessionMemoryBlock(body.sessionContext) + vinPrefillBlock;
+  const apvOverride = apvEnabled ? buildApvOverrideBlock() : "";
+  const systemPrompt = baseSystem + buildPromptSuffix(body.pageContext, !!body.voice) + buildSessionMemoryBlock(body.sessionContext) + apvOverride + vinPrefillBlock;
 
   const geminiKey = process.env.GOOGLE_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;

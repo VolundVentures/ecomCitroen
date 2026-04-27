@@ -4,6 +4,8 @@
 // The API route emits ND-JSON lines with {type:"tool", name, input}; this module
 // turns them into real DOM / router side effects.
 
+import { lookupVin } from "@/lib/vin-lookup";
+
 export type ConfiguratorChange = {
   modelSlug?: string;
   colorId?: string;
@@ -339,6 +341,32 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
       case "end_call": {
         emitEndCall();
         return "call ended";
+      }
+      case "lookup_vin": {
+        // APV (Jeep) — voice path. Look up the customer record from the mock
+        // CRC database and return a structured string the model reads on its
+        // next turn. The chat path uses server-side VIN PREFILL injection
+        // instead; this case keeps the voice flow symmetric.
+        const rawVin = String(input.vin ?? "");
+        const rec = lookupVin(rawVin);
+        if (!rec) {
+          return `vin_lookup_result=not_found · vin="${rawVin}" · The chassis number is not in the CRC database. Tell the customer politely and offer to collect their info manually (full name → mobile → email → confirm Jeep + model), then continue with intervention type / city / date / slot.`;
+        }
+        const firstName = rec.fullName.split(/\s+/)[0] ?? rec.fullName;
+        const parts = [
+          `vin_lookup_result=matched`,
+          `vin=${rec.vin}`,
+          `first_name=${firstName}`,
+          `full_name=${rec.fullName}`,
+          `phone=${rec.phone}`,
+          `email=${rec.email}`,
+          `vehicle=${rec.brand} ${rec.model} (${rec.modelYear})`,
+          `registration_city=${rec.registrationCity}`,
+        ];
+        if (rec.preferredSite) parts.push(`preferred_site=${rec.preferredSite}`);
+        if (rec.lastServiceDate) parts.push(`last_service=${rec.lastServiceDate} at ${rec.lastServiceLocation ?? "-"}`);
+        parts.push("Greet by first_name in the customer's language and confirm full_name + phone + email + vehicle (and preferred_site if present) in ONE warm sentence, then ask intervention type (mécanique / carrosserie). DO NOT re-ask name / phone / email / brand / model.");
+        return parts.join(" · ");
       }
       case "find_showrooms": {
         const city = typeof input.city === "string" ? input.city : undefined;
