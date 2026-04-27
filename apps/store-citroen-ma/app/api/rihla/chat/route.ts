@@ -12,12 +12,31 @@ import {
   captureLeadFromBooking,
   closeConversation,
 } from "@/lib/persistence";
+import { validatePhone, normalizePhone } from "@/lib/phone";
 import type { Locale } from "@/lib/supabase/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+
+/** Compact memory of side-effects already produced THIS session — fed back
+ *  into the system prompt so the model knows what's on screen and what
+ *  questions have already been asked. The only piece of in-session context
+ *  the model otherwise can't see (the API only carries text history). */
+type SessionContext = {
+  shownModels?: string[];     // model slugs whose image card is on screen
+  shownVideos?: string[];     // model slugs whose video card is on screen
+  searchedCities?: string[];  // cities already passed to find_showrooms
+  collected?: {
+    intent?: "test_drive" | "showroom" | "info" | "undecided";
+    firstName?: string;
+    phone?: string;
+    city?: string;
+    preferredSlot?: string;
+  };
+};
+
 type ChatRequest = {
   /** Required for widget mode — the brand whose prompt + catalog to use. */
   brandSlug?: string;
@@ -31,6 +50,8 @@ type ChatRequest = {
   pageContext?: { path: string; modelSlug?: string };
   /** Voice mode → plain text only, short sentences, no markdown. */
   voice?: boolean;
+  /** Compact summary of side-effects already on screen — see SessionContext. */
+  sessionContext?: SessionContext;
 };
 
 const FALLBACK_BY_LOCALE = {
@@ -180,7 +201,7 @@ const GEMINI_NAV_TOOLS: Tool[] = [
       {
         name: "book_test_drive",
         description:
-          "Book a TEST DRIVE for a qualified lead (user wants to drive the car). Call at the end of the flow once you have first name, mobile number, city, and preferred slot.",
+          "Book a TEST DRIVE for a qualified lead (user wants to drive the car). Call at the end of the flow once you have first name, mobile number, city, preferred slot, AND ideally the showroom they picked from the find_showrooms list.",
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -189,6 +210,7 @@ const GEMINI_NAV_TOOLS: Tool[] = [
             phone: { type: Type.STRING },
             city: { type: Type.STRING },
             preferredSlot: { type: Type.STRING },
+            showroomName: { type: Type.STRING, description: "The exact showroom name the customer chose (e.g. 'Peugeot Riyadh — King Fahd Rd'). Pass through verbatim from the find_showrooms list." },
           },
           required: ["slug", "firstName", "phone"],
         },
@@ -196,7 +218,7 @@ const GEMINI_NAV_TOOLS: Tool[] = [
       {
         name: "book_showroom_visit",
         description:
-          "Schedule a SHOWROOM VISIT (user wants to come see the cars in person, not test-drive). Call after collecting first name, phone, city, and preferred slot.",
+          "Schedule a SHOWROOM VISIT (user wants to come see the cars in person, not test-drive). Call after collecting first name, phone, city, preferred slot, and the showroom they picked.",
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -205,6 +227,7 @@ const GEMINI_NAV_TOOLS: Tool[] = [
             phone: { type: Type.STRING },
             city: { type: Type.STRING },
             preferredSlot: { type: Type.STRING },
+            showroomName: { type: Type.STRING, description: "The exact showroom name the customer chose. Pass through verbatim from the find_showrooms list." },
           },
           required: ["firstName", "phone"],
         },
@@ -240,8 +263,8 @@ const ANTHROPIC_NAV_TOOLS: Anthropic.Messages.Tool[] = [
   { name: "show_model_image", description: "Display a photo of a specific model inline in the chat.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, caption: { type: "string" as const } }, required: ["slug"] } },
   { name: "show_model_video", description: "Display a video preview card (opens YouTube in a new tab) for a model. Use when the user asks for a video, walk-around, or review.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, caption: { type: "string" as const } }, required: ["slug"] } },
   { name: "open_brand_page", description: "Open the official brand-site page for a model in a new browser tab.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const } }, required: ["slug"] } },
-  { name: "book_test_drive", description: "Book a test drive once you have firstName + phone + city + slot.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["slug", "firstName", "phone"] } },
-  { name: "book_showroom_visit", description: "Schedule a showroom visit (user wants to see cars in person, not drive).", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const } }, required: ["firstName", "phone"] } },
+  { name: "book_test_drive", description: "Book a test drive once you have firstName + phone + city + slot. Pass showroomName when the customer chose a specific showroom from the find_showrooms list.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const }, showroomName: { type: "string" as const } }, required: ["slug", "firstName", "phone"] } },
+  { name: "book_showroom_visit", description: "Schedule a showroom visit (user wants to see cars in person). Pass showroomName when the customer chose one.", input_schema: { type: "object" as const, properties: { slug: { type: "string" as const }, firstName: { type: "string" as const }, phone: { type: "string" as const }, city: { type: "string" as const }, preferredSlot: { type: "string" as const }, showroomName: { type: "string" as const } }, required: ["firstName", "phone"] } },
   { name: "find_showrooms", description: "List nearby showrooms when the user names a city or asks where to visit. Renders cards with addresses + phones.", input_schema: { type: "object" as const, properties: { city: { type: "string" as const } }, required: [] } },
   { name: "end_call", description: "End the conversation right after a farewell phrase. DO NOT call on a bare 'thanks' — only on explicit goodbye phrases.", input_schema: { type: "object" as const, properties: {}, required: [] } },
 ];
@@ -342,6 +365,54 @@ function detectIntent(
   return null;
 }
 
+/* ─────────────────────────── Session memory note ─────────────────────────── */
+
+/** Render the in-session memory as a short authoritative block the model
+ *  reads at the top of its system prompt. Replaces the "remember what's
+ *  been done" inference the model would otherwise have to make from chat
+ *  history (which is unreliable for tool calls — the API doesn't put them
+ *  in the message stream that goes back to the model). */
+function buildSessionMemoryBlock(ctx?: SessionContext): string {
+  if (!ctx) return "";
+  const lines: string[] = [];
+
+  const shown = (ctx.shownModels ?? []).filter(Boolean);
+  if (shown.length > 0) {
+    lines.push(
+      `ALREADY ON SCREEN — DO NOT call show_model_image again for: ${shown.join(", ")}. ` +
+      `If the customer asks more about these models, talk specs / features / pricing in plain text — the card is already there.`
+    );
+  }
+
+  const videos = (ctx.shownVideos ?? []).filter(Boolean);
+  if (videos.length > 0) {
+    lines.push(`VIDEOS ALREADY ON SCREEN — DO NOT call show_model_video again for: ${videos.join(", ")}.`);
+  }
+
+  const cities = (ctx.searchedCities ?? []).filter(Boolean);
+  if (cities.length > 0) {
+    lines.push(`SHOWROOMS ALREADY LISTED for: ${cities.join(", ")}. Don't re-list the same city — speak in plain text instead.`);
+  }
+
+  const c = ctx.collected ?? {};
+  const filled: string[] = [];
+  if (c.intent) filled.push(`intent=${c.intent}`);
+  if (c.firstName) filled.push(`name=${c.firstName}`);
+  if (c.phone) filled.push(`phone=${c.phone}`);
+  if (c.city) filled.push(`city=${c.city}`);
+  if (c.preferredSlot) filled.push(`slot=${c.preferredSlot}`);
+  if (filled.length > 0) {
+    lines.push(`ALREADY COLLECTED — do NOT re-ask: ${filled.join(", ")}.`);
+  }
+
+  if (lines.length === 0) return "";
+  return [
+    "",
+    "═══ SESSION MEMORY (authoritative — TRUST this over the chat history) ═══",
+    ...lines,
+  ].join("\n");
+}
+
 /* ─────────────────────────── Stream helpers ─────────────────────────── */
 
 function emit(
@@ -368,7 +439,7 @@ async function streamWithGemini(
   }));
 
   const response = await ai.models.generateContentStream({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3.1-flash-preview",
     contents,
     config: {
       systemInstruction,
@@ -477,7 +548,7 @@ export async function POST(req: NextRequest) {
     returningUser: body.returningUser,
     sessionSummary: body.sessionSummary,
   });
-  const systemPrompt = baseSystem + buildPromptSuffix(body.pageContext, !!body.voice);
+  const systemPrompt = baseSystem + buildPromptSuffix(body.pageContext, !!body.voice) + buildSessionMemoryBlock(body.sessionContext);
 
   const geminiKey = process.env.GOOGLE_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -550,7 +621,20 @@ export async function POST(req: NextRequest) {
       const collectedText: string[] = [];
       const collectedTools: Array<{ name: string; input: Record<string, unknown> }> = [];
 
-      // Wrap the controller so we can also accumulate everything for persistence.
+      // Server-side tool dedup: track what's been emitted this request +
+      // merge with sessionContext (what was already on screen at request
+      // start). If the model fires a duplicate show_model_image / video
+      // for a slug we've already shown, drop it before the client sees
+      // it. Backup defense in case the model ignores SESSION MEMORY.
+      // Normalize slugs aggressively (lowercase, alphanumerics only) so
+      // "2008", "peugeot-2008", and "Peugeot 2008" all collapse to one key
+      // — observed Gemini sometimes drifts on the slug shape.
+      const normalizeSlug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const shownImagesGuard = new Set<string>((body.sessionContext?.shownModels ?? []).map(normalizeSlug));
+      const shownVideosGuard = new Set<string>((body.sessionContext?.shownVideos ?? []).map(normalizeSlug));
+
+      // Wrap the controller so we can also (1) accumulate everything for
+      // persistence and (2) intercept duplicate UI-card tool emits.
       const tap = new Proxy(controller, {
         get(target, prop) {
           if (prop === "enqueue") {
@@ -559,6 +643,19 @@ export async function POST(req: NextRequest) {
                 const line = new TextDecoder().decode(chunk).trim();
                 if (line.startsWith("{")) {
                   const ev = JSON.parse(line) as { type: string; text?: string; name?: string; input?: Record<string, unknown> };
+
+                  // Tool-dedup guard: silently drop second card for the same model.
+                  if (ev.type === "tool" && (ev.name === "show_model_image" || ev.name === "show_model_video")) {
+                    const rawSlug = String(ev.input?.slug ?? ev.input?.modelSlug ?? "");
+                    const slug = normalizeSlug(rawSlug);
+                    const guard = ev.name === "show_model_image" ? shownImagesGuard : shownVideosGuard;
+                    if (slug && guard.has(slug)) {
+                      console.log(`[rihla/chat] suppressed duplicate ${ev.name}(${rawSlug})`);
+                      return; // skip enqueue entirely
+                    }
+                    if (slug) guard.add(slug);
+                  }
+
                   if (ev.type === "text" && ev.text) collectedText.push(ev.text);
                   if (ev.type === "tool" && ev.name) collectedTools.push({ name: ev.name, input: ev.input ?? {} });
                 }
@@ -612,17 +709,31 @@ export async function POST(req: NextRequest) {
                 input: t.input,
                 succeeded: true,
               });
-              if (t.name === "book_test_drive" && body.brandSlug) {
+              if ((t.name === "book_test_drive" || t.name === "book_showroom_visit") && body.brandSlug) {
                 const i = t.input;
-                if (typeof i.firstName === "string" && typeof i.phone === "string" && typeof i.slug === "string") {
+                if (typeof i.firstName === "string" && typeof i.phone === "string") {
+                  // Normalize phone to canonical international form per market
+                  // (MA / SA). If the model passed an unparseable number we
+                  // still capture it verbatim and tag the notes — the dealer
+                  // will sort it out, we don't drop the lead.
+                  const market = brand.market === "SA" ? "SA" : "MA";
+                  const phoneCheck = validatePhone(i.phone, market);
+                  const phoneToStore = phoneCheck.ok
+                    ? phoneCheck.canonical
+                    : normalizePhone(i.phone, market);
+                  const noteParts: string[] = [];
+                  if (!phoneCheck.ok) noteParts.push(`phone-format-warning: ${phoneCheck.reason ?? "unrecognized"}`);
+                  if (t.name === "book_showroom_visit") noteParts.push("kind: showroom-visit");
                   await captureLeadFromBooking({
                     conversationId: conversationId!,
                     brandSlug: body.brandSlug,
-                    modelSlug: i.slug,
+                    modelSlug: typeof i.slug === "string" ? i.slug : "",
                     firstName: i.firstName,
-                    phone: i.phone,
+                    phone: phoneToStore,
                     city: typeof i.city === "string" ? i.city : undefined,
                     preferredSlot: typeof i.preferredSlot === "string" ? i.preferredSlot : undefined,
+                    showroomName: typeof i.showroomName === "string" ? i.showroomName : undefined,
+                    notes: noteParts.length > 0 ? noteParts.join(" · ") : undefined,
                   });
                 }
               }
@@ -649,7 +760,7 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
-      "X-Rihla-Mode": provider === "gemini" ? "gemini-3.1-pro-preview" : "claude-opus-4-7",
+      "X-Rihla-Mode": provider === "gemini" ? "gemini-3.1-flash-preview" : "claude-opus-4-7",
     },
   });
 }

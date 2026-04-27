@@ -130,7 +130,7 @@ const LIVE_TOOLS = [
       },
       {
         name: "book_test_drive",
-        description: "Book a TEST DRIVE for a qualified lead. Use when the user wants to drive the car. Call at the end of the flow after collecting first name, mobile number, city, and preferred time slot.",
+        description: "Book a TEST DRIVE for a qualified lead. Use when the user wants to drive the car. Call at the end of the flow after collecting first name, mobile number, city, preferred slot, and the specific showroom if they chose one.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -139,13 +139,14 @@ const LIVE_TOOLS = [
             phone: { type: "STRING" },
             city: { type: "STRING" },
             preferredSlot: { type: "STRING" },
+            showroomName: { type: "STRING", description: "The exact showroom the customer chose from find_showrooms (e.g. 'Peugeot Riyadh — King Fahd Rd'). Verbatim." },
           },
           required: ["slug", "firstName", "phone"],
         },
       },
       {
         name: "book_showroom_visit",
-        description: "Schedule a SHOWROOM VISIT (the user wants to come see the cars in person, not test-drive). Call after collecting first name, phone, city, and preferred slot.",
+        description: "Schedule a SHOWROOM VISIT (the user wants to come see the cars in person, not test-drive). Call after collecting first name, phone, city, preferred slot, and the chosen showroom.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -154,6 +155,7 @@ const LIVE_TOOLS = [
             phone: { type: "STRING" },
             city: { type: "STRING" },
             preferredSlot: { type: "STRING" },
+            showroomName: { type: "STRING", description: "The exact showroom the customer chose. Verbatim." },
           },
           required: ["firstName", "phone"],
         },

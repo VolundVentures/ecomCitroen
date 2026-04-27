@@ -80,6 +80,7 @@ export type Conversation = {
   lead_city: string | null;
   lead_slot: string | null;
   lead_model_slug: string | null;
+  lead_showroom: string | null;
   ip_country: string | null;
   user_agent: string | null;
   started_at: string;
@@ -108,6 +109,7 @@ export type Message = {
   kind: MessageKind;
   content: string | null;
   payload: ImageCardPayload | ToolUsePayload | null;
+  seq: number;
   created_at: string;
 };
 
@@ -140,6 +142,7 @@ export type Lead = {
   phone: string;
   city: string | null;
   preferred_slot: string | null;
+  showroom_name: string | null;
   notes: string | null;
   status: "new" | "contacted" | "closed";
   created_at: string;

@@ -122,7 +122,17 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
 
   useEffect(() => {
     return onImageCard((payload) => {
-      setMessages((m) => [...m, { kind: "image_card", role: "assistant", payload }]);
+      setMessages((m) => {
+        // Client-side dedup backup: if this model's card is already in the
+        // message list, refresh the call-overlay image but do NOT add a
+        // second card to the chat. Same normalize rule as server-side.
+        const norm = (s: string | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const incomingSlug = norm(payload.modelSlug);
+        if (incomingSlug && m.some((x) => x.kind === "image_card" && norm(x.payload.modelSlug) === incomingSlug)) {
+          return m;
+        }
+        return [...m, { kind: "image_card", role: "assistant", payload }];
+      });
       setCallImage(payload);
     });
   }, []);
@@ -286,6 +296,25 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
         .filter((m): m is Extract<Msg, { kind: "text" }> => m.kind === "text")
         .map((m) => ({ role: m.role, content: m.text }));
 
+      // Compact session memory the server prepends to the system prompt.
+      // The Gemini API itself only carries the text history forward, so the
+      // model can't otherwise see which UI cards have been fired this
+      // session. This block is what stops it from re-showing the same model
+      // image when the customer just says "ok".
+      const shownModels: string[] = [];
+      const shownVideos: string[] = [];
+      const searchedCities: string[] = [];
+      for (const m of next) {
+        if (m.kind === "image_card" && m.payload.modelSlug) shownModels.push(m.payload.modelSlug);
+        else if (m.kind === "video_card" && m.payload.modelSlug) shownVideos.push(m.payload.modelSlug);
+        else if (m.kind === "showrooms" && m.payload.city) searchedCities.push(m.payload.city);
+      }
+      const sessionContext = {
+        shownModels: [...new Set(shownModels)],
+        shownVideos: [...new Set(shownVideos)],
+        searchedCities: [...new Set(searchedCities)],
+      };
+
       const res = await fetch("/api/rihla/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -295,6 +324,7 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
           locale: apiLocale,
           voice: false,
           messages: apiMessages,
+          sessionContext,
         }),
         signal: controller.signal,
       });
@@ -541,15 +571,14 @@ type PanelProps = {
 };
 
 function BubblePanel(p: PanelProps) {
-  // Voice mode / call view: only while the WS is actually live OR connecting.
-  // Once the hook disconnects (after end_call), we drop back to the picker so
-  // the panel never freezes on a dead call view.
-  const callActive =
-    p.mode === "voice" &&
-    (p.live.state === "connecting" ||
-      p.live.state === "connected" ||
-      p.live.state === "listening" ||
-      p.live.state === "speaking");
+  // Voice mode / call view: render immediately when the user is in voice
+  // mode, so the WebSocket-warmup gap doesn't show as a blank screen. The
+  // CallView itself handles all live states (idle / connecting / listening
+  // / speaking / error) with appropriate status labels and animations. We
+  // only fall back to the picker when the user actively leaves voice mode
+  // (mode === null after onHangUp + resetToMode) or when an error state
+  // explicitly triggers a recovery flow.
+  const callActive = p.mode === "voice" && p.live.state !== "error";
   if (callActive) {
     return (
       <CallView

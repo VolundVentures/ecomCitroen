@@ -189,6 +189,8 @@ export async function captureLeadFromBooking(args: {
   phone: string;
   city?: string;
   preferredSlot?: string;
+  showroomName?: string;
+  notes?: string;
 }): Promise<void> {
   const supa = client();
   if (!supa) return;
@@ -196,7 +198,8 @@ export async function captureLeadFromBooking(args: {
     const { data: brandRow } = await supa.from("brands").select("id").eq("slug", args.brandSlug).single();
     const brandId = (brandRow as unknown as { id?: string } | null)?.id;
     if (!brandId) return;
-    await (supa.from("leads") as any).insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const leadRow: any = {
       brand_id: brandId,
       conversation_id: args.conversationId,
       model_slug: args.modelSlug,
@@ -205,23 +208,28 @@ export async function captureLeadFromBooking(args: {
       city: args.city ?? null,
       preferred_slot: args.preferredSlot ?? null,
       status: "new",
-    });
-    await (supa.from("conversations") as any)
-      .update({
-        status: "closed_lead",
-        booked_test_drive: new Date().toISOString(),
-        captured_name: new Date().toISOString(),
-        captured_phone: new Date().toISOString(),
-        captured_city: args.city ? new Date().toISOString() : null,
-        captured_slot: args.preferredSlot ? new Date().toISOString() : null,
-        lead_name: args.firstName,
-        lead_phone: args.phone,
-        lead_city: args.city ?? null,
-        lead_slot: args.preferredSlot ?? null,
-        lead_model_slug: args.modelSlug,
-        ended_at: new Date().toISOString(),
-      })
-      .eq("id", args.conversationId);
+    };
+    if (args.showroomName) leadRow.showroom_name = args.showroomName;
+    if (args.notes) leadRow.notes = args.notes;
+    await (supa.from("leads") as any).insert(leadRow);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const convUpdate: any = {
+      status: "closed_lead",
+      booked_test_drive: new Date().toISOString(),
+      captured_name: new Date().toISOString(),
+      captured_phone: new Date().toISOString(),
+      captured_city: args.city ? new Date().toISOString() : null,
+      captured_slot: args.preferredSlot ? new Date().toISOString() : null,
+      lead_name: args.firstName,
+      lead_phone: args.phone,
+      lead_city: args.city ?? null,
+      lead_slot: args.preferredSlot ?? null,
+      lead_model_slug: args.modelSlug,
+      ended_at: new Date().toISOString(),
+    };
+    if (args.showroomName) convUpdate.lead_showroom = args.showroomName;
+    await (supa.from("conversations") as any).update(convUpdate).eq("id", args.conversationId);
   } catch { /* swallow */ }
 }
 

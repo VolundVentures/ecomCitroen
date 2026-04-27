@@ -27,10 +27,14 @@ export default async function ConversationDetail({
   const conv = convRow as unknown as Conversation | null;
   if (!conv) notFound();
 
+  // Order by seq first (deterministic per-conversation counter set by trigger
+  // in migration 00003). Fall back to created_at as a tiebreaker for pre-
+  // migration rows where seq = 0.
   const { data: msgRows } = await supa
     .from("messages")
     .select("*")
     .eq("conversation_id", id)
+    .order("seq", { ascending: true })
     .order("created_at", { ascending: true });
   const messages = (msgRows as unknown as Message[]) ?? [];
 
@@ -60,10 +64,11 @@ export default async function ConversationDetail({
           <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/70">Lead captured</div>
           <div className="mt-1 grid grid-cols-2 gap-2 text-white/80 sm:grid-cols-4">
             <div><span className="text-white/40">Name:</span> {conv.lead_name}</div>
-            <div><span className="text-white/40">Phone:</span> {conv.lead_phone}</div>
+            <div><span className="text-white/40">Phone:</span> <span className="font-mono">{conv.lead_phone}</span></div>
             <div><span className="text-white/40">City:</span> {conv.lead_city ?? "—"}</div>
             <div><span className="text-white/40">Slot:</span> {conv.lead_slot ?? "—"}</div>
-            <div className="col-span-2 sm:col-span-4"><span className="text-white/40">Model:</span> {conv.lead_model_slug}</div>
+            <div className="col-span-2 sm:col-span-2"><span className="text-white/40">Model:</span> {conv.lead_model_slug}</div>
+            <div className="col-span-2 sm:col-span-2"><span className="text-white/40">Showroom:</span> {conv.lead_showroom ?? "—"}</div>
           </div>
         </div>
       )}
@@ -95,14 +100,86 @@ function Stat({ label, value }: { label: string; value: string }) {
 function MessageBubble({ m }: { m: Message }) {
   if (m.kind === "tool_use") {
     const p = m.payload as ToolUsePayload | null;
+    if (!p) return null;
+    // Render tool_use rows the way the CUSTOMER saw them in chat — actual
+    // image / video / showroom cards — instead of a generic "Tool:" debug
+    // chip. This is what makes the admin transcript match the live UX.
+    if (p.name === "show_model_image") {
+      const slug = String(p.input?.slug ?? "");
+      const caption = String(p.input?.caption ?? slug);
+      return (
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+          <div className="aspect-[16/10] w-full bg-gradient-to-br from-white/[0.04] to-transparent" />
+          <div className="px-3 py-2 text-[12px] text-white/80">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/55">Image shown</div>
+            <div className="mt-0.5 font-medium">{caption}</div>
+          </div>
+        </div>
+      );
+    }
+    if (p.name === "show_model_video") {
+      const slug = String(p.input?.slug ?? "");
+      const caption = String(p.input?.caption ?? slug);
+      return (
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+          <div className="flex aspect-video w-full items-center justify-center bg-black/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/95">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="#0c0c10" aria-hidden>
+                <path d="M5 3.5v9l8-4.5z" />
+              </svg>
+            </div>
+          </div>
+          <div className="px-3 py-2 text-[12px] text-white/80">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-violet-300/55">Video shown</div>
+            <div className="mt-0.5 font-medium">{caption}</div>
+          </div>
+        </div>
+      );
+    }
+    if (p.name === "find_showrooms") {
+      const city = String(p.input?.city ?? "");
+      return (
+        <div className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] text-white/80">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-sky-300/55">Showrooms listed</div>
+          <div className="mt-0.5">{city ? `Searched: ${city}` : "All showrooms"}</div>
+        </div>
+      );
+    }
+    if (p.name === "book_test_drive" || p.name === "book_showroom_visit") {
+      const i = (p.input ?? {}) as Record<string, unknown>;
+      const labelKind = p.name === "book_test_drive" ? "Test drive booked" : "Showroom visit booked";
+      return (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[12px] text-emerald-100/95">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80">{labelKind}</div>
+          <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
+            {typeof i.firstName === "string" && <div><span className="text-emerald-300/55">Name:</span> {i.firstName}</div>}
+            {typeof i.phone === "string" && <div><span className="text-emerald-300/55">Phone:</span> <span className="font-mono">{i.phone}</span></div>}
+            {typeof i.city === "string" && <div><span className="text-emerald-300/55">City:</span> {i.city}</div>}
+            {typeof i.preferredSlot === "string" && <div><span className="text-emerald-300/55">Slot:</span> {i.preferredSlot}</div>}
+            {typeof i.slug === "string" && <div><span className="text-emerald-300/55">Model:</span> {i.slug}</div>}
+            {typeof i.showroomName === "string" && <div><span className="text-emerald-300/55">Showroom:</span> {i.showroomName}</div>}
+          </div>
+        </div>
+      );
+    }
+    if (p.name === "end_call") {
+      return (
+        <div className="rounded-lg border border-white/10 bg-white/[0.025] px-3 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
+          End of conversation
+        </div>
+      );
+    }
+    // Fallback for any other tool — still useful for debugging.
     return (
       <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/50">
-        <span className="text-white/40">Tool:</span>{" "}
-        <span className="font-mono text-white/80">{p?.name}</span>
-        {p?.input && Object.keys(p.input).length > 0 && (
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-[10px] text-white/40">
-            {JSON.stringify(p.input, null, 2)}
-          </pre>
+        <span className="text-white/40">Action:</span>{" "}
+        <span className="font-mono text-white/80">{p.name.replace(/_/g, " ")}</span>
+        {p.input && Object.keys(p.input).length > 0 && (
+          <span className="ms-2 font-mono text-[10px] text-white/35">
+            {Object.entries(p.input)
+              .map(([k, v]) => `${k}=${String(v).slice(0, 24)}`)
+              .join(" · ")}
+          </span>
         )}
       </div>
     );

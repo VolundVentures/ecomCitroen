@@ -21,10 +21,11 @@ const LANGS: LangConfig[] = [
     label: "Français",
     native: "Français",
     sttTag: "fr-FR",
-    // Use-case-led opener: skips the "Hi I'm a chatbot how can I help" preamble
-    // and qualifies on turn 1. The customer's first reply already names a
-    // segment we can recommend against.
-    greeting: "Salut ! Pour aller à l'essentiel — vous cherchez plutôt une citadine, un SUV famille, ou quelque chose pour les longs trajets ?",
+    // Capability-aware welcome: tells the customer what the agent can do for
+    // them (explore models, compare specs, find dealers, book a test drive)
+    // and ends with an open invitation. Sets a Phase-1 tone — discovery and
+    // information first, qualification later when they signal readiness.
+    greeting: "Bonjour ! Je suis Rihla, conseillère automobile. Je peux vous présenter les modèles, comparer les caractéristiques, trouver le concessionnaire le plus proche et organiser un essai quand vous serez prêt(e). Par quoi commençons-nous ?",
     flag: "🇫🇷",
     hint: "Bonjour",
   },
@@ -33,7 +34,7 @@ const LANGS: LangConfig[] = [
     label: "Darija",
     native: "الدارجة المغربية",
     sttTag: "ar-MA",
-    greeting: "السلام ! باش نختصرو — كتقلب على طوموبيل ديال المدينة، للعائلة، ولا للسفر و الخروج آخر الأسبوع ؟",
+    greeting: "السلام ! أنا رحلة، المستشارة ديالك. كنقدر نوريك الموديلات، نقارن المواصفات، نلقى ليك الوكالة القريبة، و نحجز ليك تجربة قيادة فاش تكون مستعد. منين نبداو ؟",
     flag: "🇲🇦",
     hint: "مرحبا",
   },
@@ -42,7 +43,7 @@ const LANGS: LangConfig[] = [
     label: "العربية",
     native: "العربية الفصحى",
     sttTag: "ar-SA",
-    greeting: "أهلاً وسهلاً ! خلّونا نختصر — تبحث عن سيارة للمدينة، للعائلة، أم لرحلات طويلة ؟",
+    greeting: "أهلاً وسهلاً ! أنا رحلة، مستشارتك. أقدر أعرض لك الموديلات، أقارن المواصفات، ألاقي لك أقرب معرض، وأرتّب لك قيادة اختبارية لما تكون جاهز. من وين نبدأ ؟",
     flag: "🇸🇦",
     hint: "أهلاً",
   },
@@ -51,7 +52,7 @@ const LANGS: LangConfig[] = [
     label: "English",
     native: "English",
     sttTag: "en-US",
-    greeting: "Hi there! Quick start — are you looking for a city car, a family SUV, or something for longer trips?",
+    greeting: "Hi! I'm Rihla, your advisor. I can walk you through the models, compare specs and pricing, find the nearest dealer, and book a test drive when you're ready. Where would you like to start?",
     flag: "🇬🇧",
     hint: "Hello",
   },
