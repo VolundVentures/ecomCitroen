@@ -970,13 +970,26 @@ function teaserText(lang: VoiceLang | null, brandFirstWord: string): string {
   return `Bonjour ! Besoin d'aide pour choisir votre ${brandFirstWord} ?`;
 }
 
-/** Render text, wrapping phone-like digit runs in <bdi dir="ltr"> so numbers
- *  don't reverse inside Arabic text. Splits on runs of 4+ digits (with
- *  optional spaces / dashes / +) which is enough to catch phones without
- *  triggering on stray years. */
-function renderWithLtrDigits(text: string): React.ReactNode {
-  // Match runs that look like a phone: optional +, then 4+ digits with
-  // spaces / hyphens between, total of at least 7 digits.
+/** Render an inline string: wraps phone-like digit runs in <bdi dir="ltr"> so
+ *  numbers don't reverse inside Arabic text, AND parses **bold** segments. */
+function renderInline(text: string, keyPrefix = ""): React.ReactNode {
+  // First pass: split on **bold** markers (non-greedy, single line).
+  const boldSplit = text.split(/(\*\*[^*\n]+\*\*)/g);
+  const out: React.ReactNode[] = [];
+  let bk = 0;
+  for (const seg of boldSplit) {
+    if (!seg) continue;
+    if (/^\*\*[^*\n]+\*\*$/.test(seg)) {
+      const inner = seg.slice(2, -2);
+      out.push(<strong key={`${keyPrefix}b${bk++}`}>{wrapDigits(inner, `${keyPrefix}b${bk}d`)}</strong>);
+    } else {
+      out.push(<span key={`${keyPrefix}t${bk++}`}>{wrapDigits(seg, `${keyPrefix}t${bk}d`)}</span>);
+    }
+  }
+  return out;
+}
+
+function wrapDigits(text: string, keyPrefix = ""): React.ReactNode {
   const re = /(\+?\d[\d\s-]{6,}\d)/g;
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -985,7 +998,7 @@ function renderWithLtrDigits(text: string): React.ReactNode {
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index));
     parts.push(
-      <bdi key={`bdi-${key++}`} dir="ltr" className="font-mono tabular-nums">
+      <bdi key={`${keyPrefix}${key++}`} dir="ltr" className="font-mono tabular-nums">
         {m[0]}
       </bdi>
     );
@@ -993,6 +1006,71 @@ function renderWithLtrDigits(text: string): React.ReactNode {
   }
   if (last < text.length) parts.push(text.slice(last));
   return parts.length === 0 ? text : parts;
+}
+
+/** Render an assistant chat message with minimal markdown:
+ *   - lines starting with "- " or "* " or "• " group into a <ul>
+ *   - blank lines separate paragraphs
+ *   - **bold** inline
+ *   - phone-shaped digit runs wrapped in <bdi> to keep LTR ordering in RTL
+ *  Designed for the constrained output our voice / chat agents produce — not
+ *  a general-purpose markdown library. Keeps zero deps. */
+function renderRichText(text: string): React.ReactNode {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const blocks: React.ReactNode[] = [];
+  let listBuf: string[] = [];
+  let paraBuf: string[] = [];
+  let key = 0;
+
+  const flushList = () => {
+    if (listBuf.length === 0) return;
+    blocks.push(
+      <ul key={`ul-${key++}`} className="my-1 list-disc space-y-0.5 ps-5">
+        {listBuf.map((item, i) => (
+          <li key={i}>{renderInline(item, `li${key}-${i}-`)}</li>
+        ))}
+      </ul>
+    );
+    listBuf = [];
+  };
+  const flushPara = () => {
+    if (paraBuf.length === 0) return;
+    const joined = paraBuf.join(" ");
+    blocks.push(
+      <p key={`p-${key++}`} className="my-0">
+        {renderInline(joined, `p${key}-`)}
+      </p>
+    );
+    paraBuf = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    const bullet = line.match(/^(?:[-*•]|\d+\.)\s+(.*)$/);
+    if (bullet) {
+      flushPara();
+      listBuf.push(bullet[1]);
+      continue;
+    }
+    if (line === "") {
+      flushList();
+      flushPara();
+      continue;
+    }
+    flushList();
+    paraBuf.push(line);
+  }
+  flushList();
+  flushPara();
+
+  if (blocks.length === 0) return renderInline(text);
+  if (blocks.length === 1) return blocks[0];
+  return <div className="space-y-1.5">{blocks}</div>;
+}
+
+/** Back-compat alias kept for the user-side bubble (single-line, no lists). */
+function renderWithLtrDigits(text: string): React.ReactNode {
+  return wrapDigits(text);
 }
 
 function TextMsg({
@@ -1019,7 +1097,7 @@ function TextMsg({
         </div>
         <div className="min-w-0 max-w-[82%]">
           <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[13px] leading-relaxed text-[#0c0c10] shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_0_1px_rgba(0,0,0,0.04)]">
-            {m.text ? renderWithLtrDigits(m.text) : streaming ? <TypingDots /> : ""}
+            {m.text ? renderRichText(m.text) : streaming ? <TypingDots /> : ""}
           </div>
           {m.tools && m.tools.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1 ps-1">
