@@ -1049,7 +1049,7 @@ function renderRichText(text: string): React.ReactNode {
     const bullet = line.match(/^(?:[-*•]|\d+\.)\s+(.*)$/);
     if (bullet) {
       flushPara();
-      listBuf.push(bullet[1]);
+      listBuf.push(bullet[1] ?? "");
       continue;
     }
     if (line === "") {
