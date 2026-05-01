@@ -188,6 +188,8 @@ export type WidgetBrand = {
   slug: string;
   /** Display name used in UI labels and showroom-card headings. */
   name?: string;
+  /** Persona name shown as the chat header / call view ("NARA", "Rihla", …). */
+  agentName?: string;
   homepageUrl: string;
   models: Array<{
     slug: string;
@@ -213,8 +215,29 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
   // In widget mode, we delegate "show me a model" intents to image cards and
   // "go to the page" intents to opening the brand site in a new tab.
   const widgetMode = !!brand;
-  const findModel = (slug: string) =>
-    brand?.models.find((m) => m.slug === slug || m.slug === slug.toLowerCase());
+  // Fuzzy slug resolver — voice transcripts often deliver "Wrangler" /
+  // "Jeep Wrangler" / "wrangler 2024" instead of the canonical "wrangler"
+  // slug. Normalize aggressively (lowercase, alphanumerics only) and try:
+  //   1. exact match on canonical slug
+  //   2. canonical slug ⊂ normalized input (substring containment)
+  //   3. canonical model name ⊂ normalized input
+  const normSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const findModel = (slug: string) => {
+    if (!brand?.models?.length || !slug) return undefined;
+    const ns = normSlug(slug);
+    if (!ns) return undefined;
+    const exact = brand.models.find((m) => normSlug(m.slug) === ns);
+    if (exact) return exact;
+    const slugSubstr = brand.models.find((m) => {
+      const ms = normSlug(m.slug);
+      return ms && (ns.includes(ms) || ms.includes(ns));
+    });
+    if (slugSubstr) return slugSubstr;
+    return brand.models.find((m) => {
+      const mn = normSlug(m.name);
+      return mn && (ns.includes(mn) || mn.includes(ns));
+    });
+  };
 
   try {
     switch (name) {
@@ -232,20 +255,25 @@ export function dispatchRihlaTool(call: RihlaToolCall, ctx: DispatchCtx): string
         const slug = String(input.slug ?? input.modelSlug ?? "");
         const model = slug ? findModel(slug) : undefined;
         const imageUrl = typeof input.imageUrl === "string" ? input.imageUrl : model?.heroImage;
-        if (!imageUrl) return `no image for slug "${slug}"`;
+        if (!imageUrl) {
+          const known = brand?.models?.map((m) => m.slug).join(", ") ?? "—";
+          console.warn(`[rihla] show_model_image — no image resolved for slug "${slug}". Known: [${known}]`);
+          return `no image for slug "${slug}" — known slugs: [${known}]`;
+        }
         const caption =
           typeof input.caption === "string"
             ? input.caption
             : model
             ? model.name
             : undefined;
+        console.log(`[rihla] show_model_image → ${model?.slug ?? slug} (${imageUrl})`);
         emitImageCard({
-          modelSlug: slug || undefined,
+          modelSlug: model?.slug ?? slug ?? undefined,
           imageUrl,
           caption,
           ctaUrl: model?.pageUrl,
         });
-        return `showed image for ${slug || "model"}`;
+        return `showed image for ${model?.slug ?? slug}`;
       }
       case "show_model_video": {
         const slug = String(input.slug ?? input.modelSlug ?? "");

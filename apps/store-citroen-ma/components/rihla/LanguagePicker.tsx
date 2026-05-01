@@ -66,10 +66,10 @@ export function getLangConfig(id: VoiceLang) {
  *  Info / Réclamation), currently jeep-ma only. The default sales-only
  *  greetings live in the LANGS table above. */
 const APV_GREETINGS: Record<VoiceLang, string> = {
-  fr: "Bonjour ! Je suis Rihla. Je peux vous aider à choisir un nouveau véhicule, prendre rendez-vous à l'atelier, répondre à vos questions sur la garantie, l'entretien ou les accessoires, ou enregistrer une réclamation. Que puis-je faire pour vous ?",
-  darija: "السلام! أنا رحلة. كنقدر نعاونك تختار طوموبيل جديدة، تحجز رنديفو فالأتولي، تجاوب على أسئلة الضمان، الصيانة والإكسيسوار، ولا تسجل شكاية. شنو نقدر ندير ليك ؟",
-  ar: "أهلاً وسهلاً ! أنا رحلة. أساعدك في اختيار سيارة جديدة، حجز موعد للصيانة، الإجابة عن أسئلتك حول الضمان والصيانة والإكسسوارات، أو تسجيل شكوى. كيف أقدر أخدمك ؟",
-  en: "Hi! I'm Rihla. I can help you choose a new car, book a service appointment, answer your questions on warranty / maintenance / accessories, or take a complaint. What can I do for you?",
+  fr: "Bonjour, je suis NARA, votre conseillère Jeep Maroc. Je peux vous accompagner pour choisir un véhicule, organiser un rendez-vous d'atelier, répondre à vos questions sur la garantie, l'entretien ou les accessoires, ou enregistrer une réclamation. Comment puis-je vous être utile ?",
+  darija: "السلام، أنا نارا، المستشارة ديالك ف Jeep Maroc. كنقدر نعاونك تختار طوموبيل، تحجز رنديفو فالأتولي، تجاوب على أسئلة الضمان، الصيانة، ولا الإكسيسوار، ولا تسجل شكاية. كيفاش نقدر نخدمك ؟",
+  ar: "أهلاً بكم، أنا نارا، مستشارتكم لدى Jeep المغرب. يسعدني مساعدتكم في اختيار مركبة، حجز موعد للصيانة، الإجابة عن استفساراتكم بشأن الضمان والصيانة والإكسسوارات، أو تسجيل شكوى. كيف يمكنني خدمتكم ؟",
+  en: "Hello, I'm NARA, your Jeep Morocco advisor. I can help you select a vehicle, schedule a service appointment, answer your questions on warranty, maintenance or accessories, or register a complaint. How may I assist you today?",
 };
 
 /** Returns the greeting to use as the chat opener — falls back to the
@@ -85,10 +85,13 @@ export function LanguagePicker({
   onSelect,
   available,
   accent = "#0c0c10",
+  agentName = "Rihla",
 }: {
   onSelect: (lang: VoiceLang) => void;
   available?: VoiceLang[];
   accent?: string;
+  /** Persona name shown in the "Powered by …" footer. */
+  agentName?: string;
 }) {
   const langs = available && available.length > 0 ? LANGS.filter((l) => available.includes(l.id)) : LANGS;
 
@@ -206,7 +209,7 @@ export function LanguagePicker({
         transition={{ delay: 0.55 }}
         className="mt-4 flex items-center justify-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-black/30"
       >
-        Powered by Rihla
+        Powered by {agentName}
       </motion.div>
     </motion.div>
   );

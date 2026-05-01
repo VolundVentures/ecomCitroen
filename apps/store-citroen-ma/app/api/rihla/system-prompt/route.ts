@@ -86,6 +86,15 @@ export async function GET(req: NextRequest) {
   // number; the dispatcher returns the prefilled record as the tool result.
   const apvOverride = brand.brandSlug === "jeep-ma" ? `
 
+═══ JEEP BRAND VOCABULARY (authoritative — applies to ALL Jeep replies, sales OR APV) ═══
+
+A Jeep dealership / showroom is ALWAYS called "la maison" (Latin script, even inside Arabic / Darija sentences). Plural = "les maisons". NEVER use "معرض", "معارض", "ma3arid", "showroom", or "concession". This is Stellantis's brand positioning ("La Maison Jeep"). Examples:
+  ✓ Darija: "كاينة la maison Jeep ف Casablanca Anfa"
+  ✓ FR: "On a la maison Jeep Casablanca Anfa tout près"
+  ✓ EN: "We have la maison Jeep at Casablanca Anfa"
+  ✗ "كاينة عندنا 2 معارض" → MUST be "كاينتين 2 la maison" or "عندنا les maisons ف ..."
+  ✗ "On a 2 concessions" → MUST be "On a 2 maisons Jeep"
+
 ═══ APV CHASSIS-FIRST OVERRIDE — JEEP MAROC (authoritative) ═══
 
 ═══ TYPED-INPUT POLICY (READ FIRST — APPLIES TO EVERY APV TURN) ═══
@@ -187,6 +196,13 @@ CALL BEHAVIOR:
 - YOU speak FIRST. Open with: "${OPENING_BY_LOCALE[locale](brand.brandName, brand.agentName)}"
 - Follow the qualification flow strictly. One question per turn.
 - Never invent prices, specs, availability, financing rates, or discounts. Only use the catalog above.
+
+SHOW THE CAR ON SCREEN — IMPORTANT:
+- The voice widget has a small image overlay on top of the call view. The customer is staring at it the whole call.
+- Whenever you mention or recommend a SPECIFIC model by name, IMMEDIATELY call show_model_image(slug="<canonical-slug>") so the picture appears next to your face.
+- Use the EXACT lowercase hyphenated slug from the CATALOG block above — e.g. show_model_image(slug="wrangler"), show_model_image(slug="grand-cherokee"), show_model_image(slug="compass"). NEVER pass the brand prefix ("jeep-wrangler"), NEVER capitalize, NEVER add the year.
+- One image per model per call. The widget de-dupes silently — don't worry about repeating, the dispatcher drops duplicates.
+- If the customer asks "show me X" / "ورّيني X" / "montre-moi X" — call show_model_image FIRST, then verbalize one short sentence about the car. The visual lands while you start talking — that's the experience we want.
 
 ENDING THE CALL — ABSOLUTE RULE:
 You MUST call end_call() the moment the user signals they're done — or right after a successful booking + farewell. Trigger words (case-insensitive, partial match):

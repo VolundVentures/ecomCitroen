@@ -58,7 +58,7 @@ const BRAND_META: Record<string, {
     primaryColor: "#000000",
     logoUrl: "/brands/jeep-ma/logo.svg",
     voiceName: "Zephyr",
-    agentName: "Rihla",
+    agentName: "NARA",
     locales: ["fr-MA", "ar-MA", "darija-MA", "en-MA"],
   },
   "citroen-ma": {

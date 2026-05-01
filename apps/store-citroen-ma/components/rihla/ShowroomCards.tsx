@@ -8,7 +8,14 @@ type Locale = "fr" | "ar" | "darija" | "en" | null | undefined;
 
 function showroomHeader(count: number, city: string | undefined, locale: Locale): string {
   const cityPart = city ? ` · ${city}` : "";
-  if (locale === "ar" || locale === "darija") {
+  // Darija uses the brand-marketing term "la maison" (Stellantis stores in
+  // Morocco are positioned as "La Maison [Brand]"), kept in Latin even inside
+  // RTL flow. Standard Arabic still uses معرض.
+  if (locale === "darija") {
+    if (count === 1) return `la maison${cityPart}`;
+    return `${count} maisons${cityPart}`;
+  }
+  if (locale === "ar") {
     if (count === 1) return `معرض واحد${cityPart}`;
     if (count === 2) return `معرضان${cityPart}`;
     return `${count} معارض${cityPart}`;

@@ -384,6 +384,14 @@ function buildPromptSuffix(
 function buildApvOverrideBlock(): string {
   return [
     "",
+    "═══ JEEP BRAND VOCABULARY (authoritative — applies to ALL Jeep replies, sales OR APV) ═══",
+    "A Jeep dealership / showroom is ALWAYS called \"la maison\" (Latin script, even inside Arabic / Darija sentences). Plural = \"les maisons\". NEVER use \"معرض\", \"معارض\", \"ma3arid\", \"showroom\", or \"concession\". This is Stellantis's brand positioning (\"La Maison Jeep\"). Examples:",
+    "  ✓ Darija: \"كاينة la maison Jeep ف Casablanca Anfa\"",
+    "  ✓ FR: \"On a la maison Jeep Casablanca Anfa tout près\"",
+    "  ✓ EN: \"We have la maison Jeep at Casablanca Anfa\"",
+    "  ✗ \"كاينة عندنا 2 معارض\" → MUST be \"كاينتين 2 la maison\" or \"عندنا les maisons ف ...\"",
+    "  ✗ \"On a 2 concessions\" → MUST be \"On a 2 maisons Jeep\"",
+    "",
     "═══ APV CHASSIS-FIRST OVERRIDE (authoritative — overrides any prior APV instructions) ═══",
     "",
     "When the customer's intent is RDV (service appointment / rendez-vous / atelier / révision / vidange / mécanique / carrosserie) OR Réclamation (complaint / problème / mécontent), the FIRST AND ONLY question on the next turn is the chassis number (numéro de châssis / VIN). NEVER ask for name, phone, email, brand or model before the chassis number — the CRC system pre-fills those from the VIN.",

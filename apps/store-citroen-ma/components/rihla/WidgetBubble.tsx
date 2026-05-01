@@ -612,6 +612,7 @@ function BubblePanel(p: PanelProps) {
         duration={p.callDuration}
         accent={p.accent}
         brandName={p.brand.name}
+        agentName={p.brand.agentName ?? "Rihla"}
         locale={p.voiceLang}
         currentImage={p.callImage}
         typeRequest={p.typeRequest}
@@ -646,13 +647,13 @@ function BubblePanel(p: PanelProps) {
       <AnimatePresence mode="wait">
         {p.stage === "lang" && (
           <motion.div key="lang" className="flex-1 overflow-hidden">
-            <LanguagePicker onSelect={p.handleLangSelect} available={p.availableLangs} accent={p.accent} />
+            <LanguagePicker onSelect={p.handleLangSelect} available={p.availableLangs} accent={p.accent} agentName={p.brand.agentName ?? "Rihla"} />
           </motion.div>
         )}
 
         {p.stage === "mode" && p.voiceLang && (
           <motion.div key="mode" className="flex-1 overflow-hidden">
-            <ModePicker lang={p.voiceLang} accent={p.accent} onSelect={p.handleModeSelect} onBack={p.resetToLang} />
+            <ModePicker lang={p.voiceLang} accent={p.accent} agentName={p.brand.agentName ?? "Rihla"} onSelect={p.handleModeSelect} onBack={p.resetToLang} />
           </motion.div>
         )}
 
@@ -733,7 +734,7 @@ function BubblePanel(p: PanelProps) {
                 </motion.button>
               </div>
               <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-black/30">
-                <span>Powered by Rihla</span>
+                <span>Powered by {p.brand.agentName ?? "Rihla"}</span>
                 <button
                   type="button"
                   onClick={p.resetToMode}
@@ -800,7 +801,7 @@ function Header({
       )}
 
       <div className="relative min-w-0 flex-1">
-        <div className="text-[13px] font-semibold leading-tight">{isChat ? "Rihla" : brand.name}</div>
+        <div className="text-[13px] font-semibold leading-tight">{isChat ? (brand.agentName ?? "Rihla") : brand.name}</div>
         <div className="flex items-center gap-1.5 text-[11px] opacity-85">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           <span>{isChat ? agentSubtitle(voiceLang, brand.name) : onlineLabel(voiceLang)}</span>

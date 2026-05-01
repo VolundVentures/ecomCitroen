@@ -13,6 +13,8 @@ type CallViewProps = {
   duration: number;
   accent?: string;
   brandName?: string;
+  /** Persona name shown in the header ("NARA", "Rihla", …). Defaults to "Rihla". */
+  agentName?: string;
   /** When provided, exposes a "type" affordance the user can tap to send text mid-call. */
   onSendText?: (text: string) => void;
   /** Locale for the typing affordance label. */
@@ -37,20 +39,23 @@ function viewSiteLabel(locale: CallViewProps["locale"]): string {
   return "Voir sur le site officiel";
 }
 
-function statusText(state: LiveState, locale: CallViewProps["locale"]): string {
+function statusText(state: LiveState, locale: CallViewProps["locale"], agentName: string): string {
+  // Arabic display form for the speaking line — Latin agent names like "NARA"
+  // stay in Latin (read out as letters), legacy "Rihla" maps to "رحلة".
+  const arName = agentName === "Rihla" ? "رحلة" : agentName;
   if (locale === "en") {
-    if (state === "speaking") return "Rihla is speaking…";
+    if (state === "speaking") return `${agentName} is speaking…`;
     if (state === "listening") return "Listening…";
     if (state === "connecting") return "Connecting…";
     return "On call";
   }
   if (locale === "ar" || locale === "darija") {
-    if (state === "speaking") return "رحلة تتحدث…";
+    if (state === "speaking") return `${arName} تتحدث…`;
     if (state === "listening") return "تفضل…";
     if (state === "connecting") return "جاري الاتصال…";
     return "في المكالمة";
   }
-  if (state === "speaking") return "Rihla parle…";
+  if (state === "speaking") return `${agentName} parle…`;
   if (state === "listening") return "À vous…";
   if (state === "connecting") return "Connexion…";
   return "En appel";
@@ -68,6 +73,7 @@ export function CallView({
   duration,
   accent = "#60a5fa",
   brandName = "Rihla",
+  agentName = "Rihla",
   onSendText,
   locale,
   currentImage,
@@ -78,7 +84,7 @@ export function CallView({
   const timeStr = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
   const isActive = state === "listening" || state === "speaking" || state === "connected";
-  const statusLabel = statusText(state, locale);
+  const statusLabel = statusText(state, locale, agentName);
 
   const dotColor = state === "listening" ? "#22c55e" : state === "speaking" ? accent : "#a3e635";
 
@@ -227,7 +233,7 @@ export function CallView({
         </motion.div>
 
         <div className={`relative text-center ${currentImage?.imageUrl ? "mt-3" : "mt-5"}`}>
-          <div className={`font-semibold tracking-tight text-white ${currentImage?.imageUrl ? "text-base" : "text-xl"}`}>Rihla</div>
+          <div className={`font-semibold tracking-tight text-white ${currentImage?.imageUrl ? "text-base" : "text-xl"}`}>{agentName}</div>
           <div className={`mt-0.5 text-white/45 ${currentImage?.imageUrl ? "text-[11px]" : "text-[12px]"}`}>{advisorLabel(locale)} · {brandName}</div>
 
           {/* Equalizer is positioned ABSOLUTELY below the name so it doesn't

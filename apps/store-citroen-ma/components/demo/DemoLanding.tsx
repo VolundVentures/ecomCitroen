@@ -308,7 +308,7 @@ export function DemoLanding({ ctx, accent }: Props) {
 
       <footer className="border-t border-white/5">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-6 py-7 text-[11px] text-white/35 sm:flex-row">
-          <div>© {new Date().getFullYear()} {brand.name} · Powered by Rihla</div>
+          <div>© {new Date().getFullYear()} {brand.name} · Powered by {brand.agent_name || "Rihla"}</div>
           <div className="flex items-center gap-3">
             <span>Demo Stellantis</span>
             <span>·</span>

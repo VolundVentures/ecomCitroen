@@ -6,45 +6,57 @@ import type { VoiceLang } from "@/components/rihla/LanguagePicker";
 
 export type Mode = "chat" | "voice";
 
-const COPY: Record<VoiceLang, { title: string; subtitle: string; chat: { title: string; sub: string }; voice: { title: string; sub: string } }> = {
-  fr: {
-    title: "Comment préférez-vous discuter ?",
-    subtitle: "Rihla peut répondre par message ou en appel vocal.",
-    chat: { title: "Par message", sub: "Réponse instantanée, à votre rythme." },
-    voice: { title: "Appel vocal", sub: "Conversation naturelle, comme au téléphone." },
-  },
-  darija: {
-    title: "كيفاش بغيتي تهضر ؟",
-    subtitle: "تقدر تكتب ولا تهضر معاها مباشرة.",
-    chat: { title: "بالكتابة", sub: "جواب سريع، بالوقت ديالك." },
-    voice: { title: "مكالمة صوتية", sub: "محادثة طبيعية، كأنك ف التيليفون." },
-  },
-  ar: {
-    title: "كيف تفضل التواصل ؟",
-    subtitle: "يمكنك الكتابة أو الاتصال بـ رحلة مباشرة.",
-    chat: { title: "كتابياً", sub: "ردود فورية، على راحتك." },
-    voice: { title: "مكالمة صوتية", sub: "محادثة طبيعية، كأنك تتصل هاتفياً." },
-  },
-  en: {
-    title: "How would you like to chat?",
-    subtitle: "Rihla can answer by message or live voice call.",
-    chat: { title: "By message", sub: "Instant replies, at your own pace." },
-    voice: { title: "Voice call", sub: "Natural conversation, like a phone call." },
-  },
-};
+/** Arabic display form for a Latin agent name. Legacy "Rihla" maps to "رحلة";
+ *  any other Latin name (e.g. "NARA") stays in Latin so it reads as letters. */
+function arName(name: string): string {
+  return name === "Rihla" ? "رحلة" : name;
+}
+
+function buildCopy(agentName: string): Record<VoiceLang, { title: string; subtitle: string; chat: { title: string; sub: string }; voice: { title: string; sub: string } }> {
+  const arn = arName(agentName);
+  return {
+    fr: {
+      title: "Comment préférez-vous discuter ?",
+      subtitle: `${agentName} peut répondre par message ou en appel vocal.`,
+      chat: { title: "Par message", sub: "Réponse instantanée, à votre rythme." },
+      voice: { title: "Appel vocal", sub: "Conversation naturelle, comme au téléphone." },
+    },
+    darija: {
+      title: "كيفاش بغيتي تهضر ؟",
+      subtitle: "تقدر تكتب ولا تهضر معاها مباشرة.",
+      chat: { title: "بالكتابة", sub: "جواب سريع، بالوقت ديالك." },
+      voice: { title: "مكالمة صوتية", sub: "محادثة طبيعية، كأنك ف التيليفون." },
+    },
+    ar: {
+      title: "كيف تفضل التواصل ؟",
+      subtitle: `يمكنك الكتابة أو الاتصال بـ ${arn} مباشرة.`,
+      chat: { title: "كتابياً", sub: "ردود فورية، على راحتك." },
+      voice: { title: "مكالمة صوتية", sub: "محادثة طبيعية، كأنك تتصل هاتفياً." },
+    },
+    en: {
+      title: "How would you like to chat?",
+      subtitle: `${agentName} can answer by message or live voice call.`,
+      chat: { title: "By message", sub: "Instant replies, at your own pace." },
+      voice: { title: "Voice call", sub: "Natural conversation, like a phone call." },
+    },
+  };
+}
 
 export function ModePicker({
   lang,
   accent,
+  agentName = "Rihla",
   onSelect,
   onBack,
 }: {
   lang: VoiceLang;
   accent: string;
+  /** Persona name shown on the chip + in subtitles ("NARA", "Rihla", …). */
+  agentName?: string;
   onSelect: (mode: Mode) => void;
   onBack?: () => void;
 }) {
-  const copy = COPY[lang];
+  const copy = buildCopy(agentName)[lang];
   const isRtl = lang === "ar" || lang === "darija";
 
   return (
@@ -64,7 +76,7 @@ export function ModePicker({
           className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em]"
           style={{ background: `${accent}12`, color: accent }}
         >
-          <Sparkles size={11} strokeWidth={2} /> Rihla
+          <Sparkles size={11} strokeWidth={2} /> {agentName.toUpperCase()}
         </motion.div>
         <motion.h3
           initial={{ y: 10, opacity: 0 }}

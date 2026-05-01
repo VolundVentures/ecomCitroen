@@ -26,6 +26,18 @@ type CacheEntry = { ctx: FullBrandContext; cachedAt: number };
 const brandCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60_000; // 60 s — refresh quickly so prompt edits land fast.
 
+/** Per-brand agent persona name. Overrides whatever's in `brands.agent_name`
+ *  in Supabase so we can rebrand without a migration / re-seed. */
+const AGENT_NAME_OVERRIDES: Record<string, string> = {
+  "jeep-ma": "NARA",
+};
+
+function applyOverrides(ctx: FullBrandContext): FullBrandContext {
+  const override = AGENT_NAME_OVERRIDES[ctx.brand.slug];
+  if (!override || ctx.brand.agent_name === override) return ctx;
+  return { ...ctx, brand: { ...ctx.brand, agent_name: override } };
+}
+
 /** Fetch the full brand bundle by slug. Falls back to cached data on Supabase failure. */
 export async function getBrandContext(slug: string): Promise<FullBrandContext | null> {
   const cached = brandCache.get(slug);
@@ -78,12 +90,12 @@ export async function getBrandContext(slug: string): Promise<FullBrandContext | 
       if (row.city) cities.add(row.city.trim());
     }
 
-    const ctx: FullBrandContext = {
+    const ctx: FullBrandContext = applyOverrides({
       brand,
       activePrompt: (prompt.data as unknown as PromptVersion | null) ?? null,
       models: (models.data as unknown as Model[]) ?? [],
       servedCities: [...cities].sort(),
-    };
+    });
     brandCache.set(slug, { ctx, cachedAt: Date.now() });
     return ctx;
   } catch (err) {
@@ -94,9 +106,10 @@ export async function getBrandContext(slug: string): Promise<FullBrandContext | 
     }
     const fallback = await loadFromJsonFallback(slug);
     if (fallback) {
+      const overridden = applyOverrides(fallback);
       console.warn(`[brand-context] supabase unreachable, serving JSON fallback for ${slug}`);
-      brandCache.set(slug, { ctx: fallback, cachedAt: Date.now() });
-      return fallback;
+      brandCache.set(slug, { ctx: overridden, cachedAt: Date.now() });
+      return overridden;
     }
     console.warn(`[brand-context] supabase unreachable + no fallback for ${slug}:`, (err as Error).message?.slice(0, 80));
     return null;

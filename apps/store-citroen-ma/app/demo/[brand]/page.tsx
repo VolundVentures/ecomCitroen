@@ -30,6 +30,7 @@ export default async function DemoPage({ params }: { params: Promise<{ brand: st
   } = {
     slug: ctx.brand.slug,
     name: ctx.brand.name,
+    agentName: ctx.brand.agent_name,
     homepageUrl: ctx.brand.homepage_url,
     logoUrl: ctx.brand.logo_url,
     primaryColor: ctx.brand.primary_color,
