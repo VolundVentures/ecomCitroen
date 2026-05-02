@@ -46,9 +46,11 @@ export default async function WidgetPage({ params }: { params: Promise<{ brand: 
     .map(localeToVoiceLang)
     .filter((l): l is VoiceLang => l !== null);
 
+  // Plain FAB-and-collapse mode — identical look + behavior to the demo on
+  // /demo/[brand] (rounded corners, drop shadow, FAB positioned bottom-right).
+  // The host iframe just needs to be big enough to contain the open panel +
+  // its shadow (~470 × 770 minimum) — see embed-test.html for an example.
   return (
-    <div className="flex h-screen w-screen flex-col">
-      <WidgetBubble brand={widgetBrand} availableLangs={availableLangs} embedded />
-    </div>
+    <WidgetBubble brand={widgetBrand} availableLangs={availableLangs} />
   );
 }

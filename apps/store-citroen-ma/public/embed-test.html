@@ -6,33 +6,56 @@
   <title>Embed test — NARA / Jeep Maroc</title>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #0c0c10; background: #f4f4f6; }
-    .hero { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 48px; text-align: center; }
+    .hero { min-height: 50vh; display: flex; align-items: center; justify-content: center; padding: 48px; text-align: center; }
     .hero h1 { font-size: 32px; margin: 0 0 12px; }
     .hero p { color: #555; max-width: 540px; margin: 0 auto; line-height: 1.6; }
     .fake { padding: 40px; max-width: 840px; margin: 0 auto; line-height: 1.6; color: #333; }
     .fake h2 { margin-top: 32px; }
+
+    /* Floating iframe — same shape AEM / Salesforce iframe components render.
+       Pinned bottom-right. The widget inside starts as a FAB and expands to a
+       full-shadowed panel when clicked (same look as /demo/[brand]). The
+       iframe needs to be big enough to contain BOTH the closed-FAB shadow
+       AND the open-panel + shadow, since static iframes can't auto-resize. */
+    .nara-frame {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 480px;
+      height: 800px;
+      max-width: 100vw;
+      max-height: 100vh;
+      border: 0;
+      background: transparent;
+      z-index: 999;
+    }
   </style>
 </head>
 <body>
   <section class="hero">
     <div>
-      <h1>Fictional host site</h1>
-      <p>This page exists only to test the NARA chat widget loaded via <code>embed.js</code>. The FAB should appear in the bottom-right corner — clicking it expands the iframe into the full chat panel; closing it shrinks the iframe back.</p>
+      <h1>Fictional host site — direct iframe test</h1>
+      <p>
+        This page now uses a plain <code>&lt;iframe src=…/w/jeep-ma&gt;</code> instead of the
+        <code>embed.js</code> loader. Same shape AEM / Salesforce iframe components produce.
+        The chat panel renders always-open inside the iframe — no FAB / collapse, since
+        a static iframe can't auto-resize on postMessage.
+      </p>
     </div>
   </section>
 
   <section class="fake">
     <h2>Lorem ipsum</h2>
-    <p>This area is host-page content. The widget iframe should sit on top of it without blocking interactions when collapsed (the iframe's transparent area is only ~96×96 around the FAB).</p>
-    <h2>Another section</h2>
-    <p>Try opening the chat, ask “Bonjour, je voudrais prendre rendez-vous”, then close it again. Watch the iframe height in DevTools — it should resize on each toggle thanks to the postMessage handshake.</p>
+    <p>This is host-page content. With the iframe pinned bottom-right the chat overlays this section. Verifies the iframe loads cleanly and that <code>frame-ancestors *</code> is honored on the deployed origin.</p>
+    <h2>How this differs from embed.js</h2>
+    <p>The <code>embed.js</code> loader injects an iframe at <code>/embed/[brand]</code> and resizes it on open / close via <code>postMessage</code>. The plain <code>&lt;iframe&gt;</code> below points at <code>/w/[brand]</code> and uses the host CSS for sizing — better for page-builder slots (AEM, Salesforce, Webflow), worse for "drop on any site" use because it can't shrink to a FAB.</p>
   </section>
 
-  <!-- ─── Drop-in: copy this two-line block onto any site ───────── -->
-  <script
-    src="https://agent-cars.vercel.app/embed.js"
-    data-brand="jeep-ma"
-    data-position="bottom-right"
-    defer></script>
+  <!-- ─── Direct-iframe approach — paste this in AEM / Salesforce iframe components ─── -->
+  <iframe
+    class="nara-frame"
+    src="/w/jeep-ma"
+    allow="microphone; autoplay; clipboard-read; clipboard-write"
+    title="NARA — Jeep Maroc"></iframe>
 </body>
 </html>
