@@ -6,6 +6,26 @@ const SF_AUTH_URL =
 const SF_LEAD_URL =
   process.env.SF_LEAD_URL ??
   "https://stellantis-e.my.salesforce.com/services/data/v54.0/sobjects/Lead";
+const SF_CASE_URL =
+  process.env.SF_CASE_URL ??
+  "https://stellantis-e.my.salesforce.com/services/data/v54.0/sobjects/Case";
+
+// RecordTypeIds for the Stellantis Case object (from NBS Consulting API doc).
+// Each combination of Type × department maps to one RecordTypeId.
+//
+// IMPORTANT: even though these IDs exist in the org, Salesforce will reject
+// the create with INVALID_CROSS_REFERENCE_KEY ("this ID value isn't valid for
+// the user") unless the integration user's Profile has the RecordType
+// assigned in "Record Type Settings → Case". If you hit that error, the fix
+// is admin-side. As a temporary workaround, set the env var to an empty
+// string ("") to omit RecordTypeId entirely — Salesforce then falls back to
+// the user's default RecordType.
+const RECORD_TYPE_INFOS_SAV =
+  process.env.SF_RECORD_TYPE_INFOS_SAV ?? "012Tv00000IRHP0IAP";
+const RECORD_TYPE_RDV_SAV =
+  process.env.SF_RECORD_TYPE_RDV_SAV ?? "012Tv00000IRHP3IAP";
+const RECORD_TYPE_RECLAMATION_SAV =
+  process.env.SF_RECORD_TYPE_RECLAMATION_SAV ?? "012Tv00000IRHP6IAP";
 
 const TOKEN_SAFETY_WINDOW_MS = 60_000;
 const TOKEN_DEFAULT_TTL_SECONDS = 3600;
@@ -227,4 +247,181 @@ export async function submitJeepTestDriveLead(
   input: JeepTestDriveInput
 ): Promise<SalesforceCreateResponse> {
   return createLead(buildJeepLead(input));
+}
+
+// ─── Jeep APV (Case) helpers ──────────────────────────────────────────────
+//
+// SAV flow (Service Après-Vente). Per Stellantis API doc, after-sales tickets
+// are POSTed to the Case object (not Lead). We collect every field from the
+// customer in-conversation — there is NO VIN lookup / pre-fill on this path.
+
+// NOTE on naming — the NBS doc and the live Stellantis Case sobject are out
+// of sync. So far the live org has rejected, with INVALID_FIELD:
+//   - Salutation__c  (and the standard Salutation)
+//   - Lead_Type__c
+// Each rejection means the field isn't provisioned on Case in this Salesforce
+// org. We drop them as they fail and document the gap; restoring them later
+// requires the NBS admin team to add the columns. The Particulier/Professionnel
+// distinction (formerly Lead_Type__c) is stuffed into the Description for now.
+export interface CasePayload {
+  SuppliedName: string;
+  SuppliedPhone: string;
+  SuppliedEmail: string;
+  Ville__c: string;
+  Marque_interet_FB__c: string;
+  Modele_d_interet_Text__c: string;
+  Showroom_FB__c: string;
+  Description: string;
+  is_Web__c: boolean;
+  Type: "Infos" | "Devis commercial" | "Demande de Test Drive" | "Prise de RDV" | "Réclamation";
+  RecordTypeId?: string;
+  Numero_de_chassis__c: string;
+  Date_de_RDV__c?: string;
+}
+
+async function postCase(token: string, payload: CasePayload): Promise<Response> {
+  return fetch(SF_CASE_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Sforce-Duplicate-Rule-Header": "allowSave=true",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createCase(payload: CasePayload): Promise<SalesforceCreateResponse> {
+  const token = await getAccessToken();
+  let res = await postCase(token, payload);
+
+  if (res.status === 401) {
+    cachedToken = null;
+    const freshToken = await getAccessToken();
+    res = await postCase(freshToken, payload);
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Salesforce case creation failed (${res.status}): ${text}`);
+  }
+
+  return (await res.json()) as SalesforceCreateResponse;
+}
+
+export type JeepApvAppointmentInput = {
+  fullName: string;
+  phone: string;
+  email: string;
+  vehicleModel: string;
+  vin: string;
+  interventionType: "mechanical" | "bodywork";
+  city: string;
+  preferredDate: string;
+  preferredSlot: "morning" | "afternoon";
+  comment?: string;
+  refNumber: string;
+  conversationId?: string | null;
+};
+
+export type JeepApvComplaintInput = {
+  fullName: string;
+  phone: string;
+  email: string;
+  vehicleModel: string;
+  vin: string;
+  interventionType: "mechanical" | "bodywork";
+  site: string;
+  serviceDate?: string | null;
+  reason: string;
+  attachmentUrl?: string;
+  refNumber: string;
+  conversationId?: string | null;
+};
+
+function modelLabelFromSlug(slug: string): string {
+  return JEEP_MODEL_LABELS[slug] ?? slug;
+}
+
+export function buildJeepApvAppointmentCase(input: JeepApvAppointmentInput): CasePayload {
+  const fullName = input.fullName.trim() || "(non communiqué)";
+  const interventionFr =
+    input.interventionType === "bodywork" ? "Carrosserie" : "Mécanique";
+  const slotFr = input.preferredSlot === "afternoon" ? "Après-midi" : "Matin";
+
+  const description = [
+    `Source : Rihla AI agent (Jeep Maroc — APV)`,
+    `Référence interne : ${input.refNumber}`,
+    `Type d'intervention : ${interventionFr}`,
+    `Créneau préféré : ${slotFr}`,
+    input.comment ? `Commentaire client : ${input.comment}` : null,
+    input.conversationId ? `Conversation ID : ${input.conversationId}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    SuppliedName: fullName,
+    SuppliedPhone: normalizePhone(input.phone),
+    SuppliedEmail: input.email.trim(),
+    Ville__c: input.city.trim(),
+    Marque_interet_FB__c: "Jeep",
+    Modele_d_interet_Text__c: modelLabelFromSlug(input.vehicleModel),
+    Showroom_FB__c: input.city.trim(),
+    Description: description,
+    is_Web__c: true,
+    Type: "Prise de RDV",
+    ...(RECORD_TYPE_RDV_SAV ? { RecordTypeId: RECORD_TYPE_RDV_SAV } : {}),
+    Numero_de_chassis__c: input.vin.trim().toUpperCase(),
+    Date_de_RDV__c: input.preferredDate,
+  };
+}
+
+export function buildJeepApvComplaintCase(input: JeepApvComplaintInput): CasePayload {
+  const fullName = input.fullName.trim() || "(non communiqué)";
+  const interventionFr =
+    input.interventionType === "bodywork" ? "Carrosserie" : "Mécanique";
+
+  const description = [
+    `Source : Rihla AI agent (Jeep Maroc — Réclamation)`,
+    `Référence interne : ${input.refNumber}`,
+    `Type d'intervention : ${interventionFr}`,
+    input.serviceDate ? `Date de la prestation : ${input.serviceDate}` : null,
+    `Motif : ${input.reason}`,
+    input.attachmentUrl ? `Pièce jointe : ${input.attachmentUrl}` : null,
+    input.conversationId ? `Conversation ID : ${input.conversationId}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    SuppliedName: fullName,
+    SuppliedPhone: normalizePhone(input.phone),
+    SuppliedEmail: input.email.trim(),
+    Ville__c: input.site.trim(),
+    Marque_interet_FB__c: "Jeep",
+    Modele_d_interet_Text__c: modelLabelFromSlug(input.vehicleModel),
+    Showroom_FB__c: input.site.trim(),
+    Description: description,
+    is_Web__c: true,
+    Type: "Réclamation",
+    ...(RECORD_TYPE_RECLAMATION_SAV ? { RecordTypeId: RECORD_TYPE_RECLAMATION_SAV } : {}),
+    Numero_de_chassis__c: input.vin.trim().toUpperCase(),
+  };
+}
+
+export async function submitJeepApvAppointment(
+  input: JeepApvAppointmentInput
+): Promise<{ payload: CasePayload; response: SalesforceCreateResponse }> {
+  const payload = buildJeepApvAppointmentCase(input);
+  const response = await createCase(payload);
+  return { payload, response };
+}
+
+export async function submitJeepApvComplaint(
+  input: JeepApvComplaintInput
+): Promise<{ payload: CasePayload; response: SalesforceCreateResponse }> {
+  const payload = buildJeepApvComplaintCase(input);
+  const response = await createCase(payload);
+  return { payload, response };
 }
