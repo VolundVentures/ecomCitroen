@@ -245,6 +245,10 @@ export function useRihlaLive(
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // Input-side AudioContext (separate from audioCtxRef which is for OUTPUT
+  // playback at 24 kHz). Tracked so we can resume it after a tab-hide auto-
+  // suspend AND so we can close it cleanly on disconnect.
+  const micCtxRef = useRef<AudioContext | null>(null);
   const workletRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const playQueueRef = useRef<Float32Array[]>([]);
@@ -480,12 +484,30 @@ export function useRihlaLive(
       streamRef.current = stream;
 
       const ctx = new AudioContext({ sampleRate: 16000 });
+      micCtxRef.current = ctx;
+      // Browsers create AudioContexts in "suspended" state when not inside a
+      // user gesture. Our connect() runs from a useEffect (auto-start when the
+      // user picks voice mode), which is async and loses the gesture context.
+      // Without this resume, processor.onaudioprocess never fires → mic
+      // captures nothing → agent appears "not listening". This is THE fix
+      // for the intermittent "have to close + reopen the call" bug.
+      if (ctx.state === "suspended") {
+        try { await ctx.resume(); } catch (err) {
+          console.warn("[rihla-live] mic AudioContext resume failed", err);
+        }
+      }
+
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
       // Use ScriptProcessor as a simple cross-browser fallback
       const processor = ctx.createScriptProcessor(4096, 1, 1);
+      let firstAudioFired = false;
       processor.onaudioprocess = (e) => {
+        if (!firstAudioFired) {
+          firstAudioFired = true;
+          console.log("[rihla-live] mic capture LIVE — first audio frame fired");
+        }
         if (ws.readyState !== WebSocket.OPEN) return;
         const input = e.inputBuffer.getChannelData(0);
         const pcm16 = new Int16Array(input.length);
@@ -506,6 +528,22 @@ export function useRihlaLive(
       source.connect(processor);
       processor.connect(ctx.destination);
       workletRef.current = processor as unknown as AudioWorkletNode;
+
+      // Watchdog: if no audio frame fires within 3 s, the AudioContext is
+      // probably still suspended (browser policy edge case). Log loudly so
+      // we can see it in DevTools and re-attempt the resume.
+      window.setTimeout(() => {
+        if (!firstAudioFired) {
+          console.warn(
+            `[rihla-live] mic watchdog: no audio frames after 3 s. ctx.state=${ctx.state}. Attempting resume + recovery.`
+          );
+          if (ctx.state === "suspended") {
+            void ctx.resume().catch((err) =>
+              console.warn("[rihla-live] watchdog resume failed", err)
+            );
+          }
+        }
+      }, 3000);
     },
     []
   );
@@ -635,6 +673,12 @@ export function useRihlaLive(
     try {
       workletRef.current?.disconnect();
     } catch { /* */ }
+    // Close the input AudioContext so the next session creates a fresh one
+    // in a known state — prevents leaking suspended contexts across sessions.
+    if (micCtxRef.current && micCtxRef.current.state !== "closed") {
+      void micCtxRef.current.close().catch(() => {});
+    }
+    micCtxRef.current = null;
   }, []);
 
   const disconnect = useCallback(() => {
@@ -690,6 +734,27 @@ export function useRihlaLive(
       disconnect();
     };
   }, [disconnect]);
+
+  // Chrome auto-suspends AudioContexts when the tab is hidden, then leaves
+  // them suspended on return — silently killing mic capture mid-call. Re-
+  // resume both contexts on visibilitychange so the call survives a tab
+  // switch. No-op if the contexts are already running or closed.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const mic = micCtxRef.current;
+      const out = audioCtxRef.current;
+      if (mic && mic.state === "suspended") {
+        void mic.resume().catch(() => {});
+      }
+      if (out && out.state === "suspended") {
+        void out.resume().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   return {
     state,
