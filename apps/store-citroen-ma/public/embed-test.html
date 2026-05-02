@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Embed test — NARA / Jeep Maroc</title>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #0c0c10; background: #f4f4f6; }
+    .hero { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 48px; text-align: center; }
+    .hero h1 { font-size: 32px; margin: 0 0 12px; }
+    .hero p { color: #555; max-width: 540px; margin: 0 auto; line-height: 1.6; }
+    .fake { padding: 40px; max-width: 840px; margin: 0 auto; line-height: 1.6; color: #333; }
+    .fake h2 { margin-top: 32px; }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <div>
+      <h1>Fictional host site</h1>
+      <p>This page exists only to test the NARA chat widget loaded via <code>embed.js</code>. The FAB should appear in the bottom-right corner — clicking it expands the iframe into the full chat panel; closing it shrinks the iframe back.</p>
+    </div>
+  </section>
+
+  <section class="fake">
+    <h2>Lorem ipsum</h2>
+    <p>This area is host-page content. The widget iframe should sit on top of it without blocking interactions when collapsed (the iframe's transparent area is only ~96×96 around the FAB).</p>
+    <h2>Another section</h2>
+    <p>Try opening the chat, ask “Bonjour, je voudrais prendre rendez-vous”, then close it again. Watch the iframe height in DevTools — it should resize on each toggle thanks to the postMessage handshake.</p>
+  </section>
+
+  <!-- ─── Drop-in: copy this two-line block onto any site ───────── -->
+  <script
+    src="/embed.js"
+    data-brand="jeep-ma"
+    data-position="bottom-right"
+    defer></script>
+</body>
+</html>

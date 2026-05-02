@@ -48,8 +48,13 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Root selector + widget + demo routes don't need next-intl.
-  if (pathname === "/" || pathname.startsWith("/w/") || pathname.startsWith("/demo/")) {
+  // Root selector + widget + demo + iframe-embed routes don't need next-intl.
+  if (
+    pathname === "/" ||
+    pathname.startsWith("/w/") ||
+    pathname.startsWith("/demo/") ||
+    pathname.startsWith("/embed/")
+  ) {
     return NextResponse.next();
   }
 
