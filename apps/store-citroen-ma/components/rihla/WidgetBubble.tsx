@@ -58,6 +58,10 @@ type Props = {
   availableLangs: VoiceLang[];
   /** When true, the panel is full-bleed inside its container (no FAB, no close). */
   embedded?: boolean;
+  /** When true, the widget posts a resize message to window.parent on open /
+   *  close so the embed snippet can shrink the iframe to free up the host
+   *  page when the chat is collapsed to a FAB. Used by /embed/[brand]. */
+  postSizeToParent?: boolean;
 };
 
 type Stage = "lang" | "mode" | "chat";
@@ -82,8 +86,22 @@ function writeStored(slug: string, lang: VoiceLang | null, mode: Mode | null) {
   else localStorage.setItem(STORAGE_KEY(slug), JSON.stringify({ lang, mode }));
 }
 
-export function WidgetBubble({ brand, availableLangs, embedded = false }: Props) {
+export function WidgetBubble({ brand, availableLangs, embedded = false, postSizeToParent = false }: Props) {
   const [open, setOpen] = useState(embedded);
+
+  // Iframe-embed handshake: tell the parent window whether the panel is open
+  // (full size, ~380×620) or collapsed to a FAB (~96×96). The embed.js snippet
+  // listens for this and resizes the iframe so the host page stays interactive
+  // while the FAB is closed. No-ops outside an iframe.
+  useEffect(() => {
+    if (!postSizeToParent || typeof window === "undefined" || window.parent === window) return;
+    try {
+      window.parent.postMessage(
+        { type: "rihla-resize", state: open ? "open" : "closed", brand: brand.slug },
+        "*"
+      );
+    } catch { /* cross-origin postMessage failures are silent */ }
+  }, [open, postSizeToParent, brand.slug]);
   const [showTeaser, setShowTeaser] = useState(false);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -527,9 +545,11 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
                 animate={{ scale: [1, 1.85, 1], opacity: [0.14, 0, 0.14] }}
                 transition={{ duration: 2.4, delay: 0.6, repeat: Infinity, ease: "easeOut" }}
               />
-              {/* Avatar */}
+              {/* Avatar — drop the heavy outer shadow when running inside an
+                  iframe (it gets clipped at the iframe edge and creates a
+                  visible square "cadre"). */}
               <span
-                className="relative block h-full w-full overflow-hidden rounded-full ring-[3px] ring-white shadow-[0_14px_36px_-8px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,0,0,0.04)]"
+                className={`relative block h-full w-full overflow-hidden rounded-full ring-[3px] ring-white ${postSizeToParent ? "" : "shadow-[0_14px_36px_-8px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,0,0,0.04)]"}`}
                 style={{ background: accent }}
               >
                 <Image
@@ -558,7 +578,13 @@ export function WidgetBubble({ brand, availableLangs, embedded = false }: Props)
             transition={{ duration: 0.28, ease: [0.22, 0.68, 0, 1] }}
             role="dialog"
             aria-label={brand.name}
-            className="fixed inset-x-3 bottom-3 z-[60] flex h-[min(720px,calc(100dvh-24px))] flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_28px_84px_-16px_rgba(0,0,0,0.32),0_0_0_1px_rgba(0,0,0,0.06)] sm:inset-x-auto sm:bottom-5 sm:end-5 sm:h-[min(720px,calc(100dvh-40px))] sm:w-[min(420px,calc(100vw-32px))]"
+            className={
+              postSizeToParent
+                // Iframe mode: fill the iframe edge-to-edge with no shadow
+                // (the iframe clips the shadow → creates a visible "cadre").
+                ? "fixed inset-0 z-[60] flex flex-col overflow-hidden rounded-[20px] bg-white"
+                : "fixed inset-x-3 bottom-3 z-[60] flex h-[min(720px,calc(100dvh-24px))] flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_28px_84px_-16px_rgba(0,0,0,0.32),0_0_0_1px_rgba(0,0,0,0.06)] sm:inset-x-auto sm:bottom-5 sm:end-5 sm:h-[min(720px,calc(100dvh-40px))] sm:w-[min(420px,calc(100vw-32px))]"
+            }
           >
             {panel}
           </motion.div>

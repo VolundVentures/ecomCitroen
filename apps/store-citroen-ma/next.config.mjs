@@ -24,6 +24,28 @@ const nextConfig = {
       { protocol: "https", hostname: "replicate.delivery" },
     ],
   },
+  async headers() {
+    return [
+      {
+        // The iframe-embeddable widget — must be loadable from any origin.
+        // Override the implicit X-Frame-Options DENY some hosts add by default.
+        source: "/embed/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+        ],
+      },
+      {
+        // The drop-in loader script — hosts include it via <script src=…>,
+        // so it must be CORS-readable and cacheable.
+        source: "/embed.js",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cache-Control", value: "public, max-age=300" },
+        ],
+      },
+    ];
+  },
 };
 
 export default withNextIntl(nextConfig);
