@@ -214,3 +214,84 @@ export type Complaint = {
   created_at: string;
   updated_at: string;
 };
+
+/* ─────────────────── Knowledge Bases (RAG — Phase 1) ─────────────────── */
+
+export type KbSourceType = "file" | "url" | "text";
+export type KbDocStatus = "pending" | "processing" | "ready" | "failed";
+
+export type KnowledgeBase = {
+  id: string;
+  brand_id: string;
+  name: string;
+  description: string | null;
+  /** Number of chunks retrieved per query (Phase 3). */
+  top_k: number;
+  /** Max characters per chunk (Phase 2). */
+  chunk_size: number;
+  /** Overlapping characters between adjacent chunks (Phase 2). */
+  chunk_overlap: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeDocument = {
+  id: string;
+  kb_id: string;
+  name: string;
+  source_type: KbSourceType;
+  /** Path inside the `knowledge-base` Storage bucket — set when source_type='file'. */
+  storage_path: string | null;
+  /** External URL — set when source_type='url'. */
+  source_url: string | null;
+  mime_type: string | null;
+  size_bytes: number;
+  /** Extracted plain text used for chunking + retrieval. */
+  raw_text: string | null;
+  status: KbDocStatus;
+  error_message: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Aggregate stats joined onto a KnowledgeBase row for the admin list view. */
+export type KnowledgeBaseSummary = KnowledgeBase & {
+  document_count: number;
+  total_size_bytes: number;
+  chunk_count: number;
+};
+
+/* ─────────────────── Knowledge Chunks (RAG — Phase 2) ─────────────────── */
+
+export type KnowledgeChunk = {
+  id: string;
+  document_id: string;
+  kb_id: string;
+  chunk_index: number;
+  content: string;
+  /** 768-dim Gemini embedding. Null until the embed pass completes. */
+  embedding: number[] | null;
+  tokens: number;
+  created_at: string;
+};
+
+/** A KnowledgeDocument augmented with chunk-pipeline stats — used by the
+ *  admin UI to show "12 chunks · 4 200 tokens" next to each row. */
+export type KnowledgeDocumentWithChunks = KnowledgeDocument & {
+  chunk_count: number;
+  chunk_tokens: number;
+};
+
+/** Result row of the `match_brand_chunks` / `match_kb_chunks` RPCs. */
+export type RetrievedChunk = {
+  id: string;
+  document_id: string;
+  document_name: string;
+  kb_id?: string;
+  kb_name?: string;
+  chunk_index: number;
+  content: string;
+  similarity: number;
+};

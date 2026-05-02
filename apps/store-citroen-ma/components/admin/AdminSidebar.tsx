@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Wrench,
   AlertTriangle,
+  Database,
 } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -45,6 +46,7 @@ export function AdminSidebar({ slug, brand, brands, accent }: Props) {
       : []),
     { href: `/admin/${slug}/analytics`, label: "Analytics", icon: BarChart3 },
     { href: `/admin/${slug}/prompt`, label: "Prompt", icon: Sparkles },
+    { href: `/admin/${slug}/knowledge`, label: "Knowledge", icon: Database },
     { href: `/admin/${slug}/settings`, label: "Settings", icon: Settings },
   ];
 
