@@ -29,7 +29,18 @@ const nextConfig = {
       {
         // The iframe-embeddable widget — must be loadable from any origin.
         // Override the implicit X-Frame-Options DENY some hosts add by default.
+        // Two source patterns share the same headers:
+        //   /embed/* — used by the FAB injector (public/embed.js)
+        //   /w/*    — used as a direct <iframe src=…> URL in page builders
+        //              (Salesforce Experience Cloud, Webflow, WordPress, etc.)
         source: "/embed/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+        ],
+      },
+      {
+        source: "/w/:path*",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
           { key: "X-Frame-Options", value: "ALLOWALL" },
