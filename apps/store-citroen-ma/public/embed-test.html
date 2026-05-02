@@ -13,18 +13,18 @@
     .fake h2 { margin-top: 32px; }
 
     /* Floating iframe — same shape AEM / Salesforce iframe components render.
-       Pinned bottom-right. The widget inside starts as a FAB and expands to a
-       full-shadowed panel when clicked (same look as /demo/[brand]). The
-       iframe needs to be big enough to contain BOTH the closed-FAB shadow
-       AND the open-panel + shadow, since static iframes can't auto-resize. */
+       Pinned bottom-right. The iframe itself is fully transparent and bare —
+       all visual chrome (rounded corners, shadow) comes from the widget INSIDE
+       the iframe (or, in iframe-mode, is dropped entirely). This way the
+       FAB-only state shows just the round avatar, not a giant white card. */
     .nara-frame {
       position: fixed;
-      bottom: 0;
-      right: 0;
-      width: 480px;
-      height: 800px;
-      max-width: 100vw;
-      max-height: 100vh;
+      bottom: 20px;
+      right: 20px;
+      width: 420px;
+      height: 720px;
+      max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 40px);
       border: 0;
       background: transparent;
       z-index: 999;
