@@ -29,6 +29,7 @@ export default async function WidgetPage({ params }: { params: Promise<{ brand: 
   } = {
     slug: ctx.brand.slug,
     name: ctx.brand.name,
+    agentName: ctx.brand.agent_name,
     homepageUrl: ctx.brand.homepage_url,
     logoUrl: ctx.brand.logo_url,
     primaryColor: ctx.brand.primary_color,
