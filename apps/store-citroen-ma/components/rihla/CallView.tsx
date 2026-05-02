@@ -15,6 +15,10 @@ type CallViewProps = {
   brandName?: string;
   /** Persona name shown in the header ("NARA", "Rihla", …). Defaults to "Rihla". */
   agentName?: string;
+  /** Mic mute toggle — fires with the NEW muted value. When omitted the mic
+   *  button stays an indicator; when provided it becomes an interactive toggle
+   *  that the user controls (default unmuted). */
+  onToggleMic?: (muted: boolean) => void;
   /** When provided, exposes a "type" affordance the user can tap to send text mid-call. */
   onSendText?: (text: string) => void;
   /** Locale for the typing affordance label. */
@@ -74,11 +78,24 @@ export function CallView({
   accent = "#60a5fa",
   brandName = "Rihla",
   agentName = "Rihla",
+  onToggleMic,
   onSendText,
   locale,
   currentImage,
   typeRequest,
 }: CallViewProps) {
+  // User-controlled mute. Default UNMUTED — fixes the "mic looks off when call
+  // starts" UX issue: the icon was previously tied to LiveState ("listening"
+  // shows Mic, anything else shows MicOff), so the user saw MicOff during
+  // "connecting" / "speaking" and assumed they had to enable it.
+  const [muted, setMuted] = useState(false);
+  const toggleMic = useCallback(() => {
+    setMuted((prev) => {
+      const next = !prev;
+      onToggleMic?.(next);
+      return next;
+    });
+  }, [onToggleMic]);
   const minutes = Math.floor(duration / 60);
   const seconds = duration % 60;
   const timeStr = `${minutes}:${seconds.toString().padStart(2, "0")}`;
@@ -371,11 +388,13 @@ export function CallView({
         <div className="flex items-center gap-7">
           <button
             type="button"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white/75"
-            title={state === "listening" ? "Mic on" : "Mic muted"}
-            aria-label="Microphone"
+            onClick={toggleMic}
+            className={`flex h-12 w-12 items-center justify-center rounded-full transition ${muted ? "bg-red-500/80 text-white hover:bg-red-500" : "bg-white/10 text-white/75 hover:bg-white/20"}`}
+            title={muted ? "Microphone muted — click to unmute" : "Microphone on — click to mute"}
+            aria-label={muted ? "Unmute microphone" : "Mute microphone"}
+            aria-pressed={muted}
           >
-            {state === "listening" ? <Mic size={18} /> : <MicOff size={18} />}
+            {muted ? <MicOff size={18} /> : <Mic size={18} />}
           </button>
 
           <motion.button

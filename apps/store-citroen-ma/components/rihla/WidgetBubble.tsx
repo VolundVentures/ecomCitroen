@@ -642,6 +642,7 @@ function BubblePanel(p: PanelProps) {
         locale={p.voiceLang}
         currentImage={p.callImage}
         typeRequest={p.typeRequest}
+        onToggleMic={(muted) => p.live.setMuted?.(muted)}
         onSendText={(t) => {
           // Send to Gemini Live with a [FIELD_TYPED] marker so the model can
           // distinguish typed input (canonical, accept verbatim) from voice

@@ -677,6 +677,14 @@ export function useRihlaLive(
     }
   }, [persistEvent]);
 
+  /** Mute / unmute the user's mic by toggling MediaStreamTrack.enabled.
+   *  When muted, the audio worklet still runs but the captured samples are
+   *  silent — Gemini receives zero amplitude, equivalent to no input. Cheap,
+   *  reversible, and doesn't tear down the audio pipeline. */
+  const setMuted = useCallback((muted: boolean) => {
+    streamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !muted; });
+  }, []);
+
   useEffect(() => {
     return () => {
       disconnect();
@@ -689,6 +697,7 @@ export function useRihlaLive(
     disconnect,
     sendText,
     notifyUserText,
+    setMuted,
     isConnected: state !== "idle" && state !== "error",
   };
 }
