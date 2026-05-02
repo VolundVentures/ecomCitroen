@@ -13,10 +13,8 @@
     .fake h2 { margin-top: 32px; }
 
     /* Floating iframe — same shape AEM / Salesforce iframe components render.
-       Pinned bottom-right. The iframe itself is fully transparent and bare —
-       all visual chrome (rounded corners, shadow) comes from the widget INSIDE
-       the iframe (or, in iframe-mode, is dropped entirely). This way the
-       FAB-only state shows just the round avatar, not a giant white card. */
+       Pinned bottom-right with the panel always open (no FAB-collapse, since
+       the inline iframe approach can't postMessage-resize the host frame). */
     .nara-frame {
       position: fixed;
       bottom: 20px;
@@ -26,7 +24,9 @@
       max-width: calc(100vw - 40px);
       max-height: calc(100vh - 40px);
       border: 0;
-      background: transparent;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px -16px rgba(0,0,0,0.32), 0 0 0 1px rgba(0,0,0,0.06);
+      background: white;
       z-index: 999;
     }
   </style>
@@ -54,7 +54,7 @@
   <!-- ─── Direct-iframe approach — paste this in AEM / Salesforce iframe components ─── -->
   <iframe
     class="nara-frame"
-    src="/w/jeep-ma"
+    src="https://agent-cars.vercel.app/w/jeep-ma"
     allow="microphone; autoplay; clipboard-read; clipboard-write"
     title="NARA — Jeep Maroc"></iframe>
 </body>
