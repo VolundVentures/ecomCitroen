@@ -54,7 +54,12 @@ export async function persistAppointment(args: {
 
   const date = validateAppointmentDate(String(i.preferredDate ?? ""));
   if (!date.ok) warnings.push(`date-${date.reason ?? "?"}`);
-  const dateFinal = date.canonical || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Use the validator's canonical ISO ONLY when valid. On failure canonical
+  // holds the raw input verbatim (e.g. malformed "y009-05-31"), which would
+  // crash Salesforce — fall back to tomorrow as a safe default.
+  const dateFinal = date.ok
+    ? date.canonical
+    : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const intervention = String(i.interventionType ?? "mechanical") as "mechanical" | "bodywork";
   const slot = String(i.preferredSlot ?? "morning") as "morning" | "afternoon";

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PhoneOff, Mic, MicOff, Keyboard, SendHorizonal, X, ExternalLink } from "lucide-react";
 import type { LiveState } from "@/lib/use-rihla-live";
 import type { ImageCardPayload } from "@/lib/rihla-actions";
+import VinScanButtons from "./VinScanButtons";
 
 type CallViewProps = {
   state: LiveState;
@@ -22,8 +23,13 @@ type CallViewProps = {
   /** When the agent calls show_model_image during a voice call, render the image overlay. */
   currentImage?: ImageCardPayload | null;
   /** When the agent asks the user to type something, this gets bumped — opens
-   *  the inline keyboard automatically, optional placeholder hint. */
-  typeRequest?: { id: number; placeholder?: string } | null;
+   *  the inline keyboard automatically, optional placeholder hint, and a
+   *  field kind so VIN-specific affordances (camera + upload OCR) can render. */
+  typeRequest?: {
+    id: number;
+    placeholder?: string;
+    kind?: "vin" | "email" | "phone" | "name";
+  } | null;
 };
 
 const TYPE_LABELS: Record<NonNullable<CallViewProps["locale"]>, { tap: string; placeholder: string; sent: string }> = {
@@ -310,6 +316,24 @@ export function CallView({
 
       {/* Bottom: controls */}
       <div className="relative shrink-0 flex flex-col items-center gap-3">
+        {/* VIN scan buttons — show when the agent asks for the chassis number,
+            so the customer can snap their carte grise instead of typing 17 chars.
+            Confirms the OCR'd VIN with the user, then sends it through the same
+            [FIELD_TYPED] path the keyboard uses. */}
+        {typing && onSendText && typeRequest?.kind === "vin" && (
+          <VinScanButtons
+            accent={accent}
+            locale={locale ?? null}
+            onConfirm={(vin) => {
+              onSendText(vin);
+              setText("");
+              setAutoPlaceholder(null);
+              setSentFlash(true);
+              setTimeout(() => setSentFlash(false), 1100);
+            }}
+          />
+        )}
+
         {/* Inline text input — slides in when the user taps "Type" */}
         <AnimatePresence>
           {typing && onSendText && (

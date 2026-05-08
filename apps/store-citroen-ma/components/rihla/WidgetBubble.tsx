@@ -26,6 +26,7 @@ import { LanguagePicker, getLangConfig, getOpeningGreeting, type VoiceLang } fro
 import { ModePicker, type Mode } from "@/components/rihla/ModePicker";
 import { CallView } from "@/components/rihla/CallView";
 import { ShowroomCards } from "@/components/rihla/ShowroomCards";
+import VinScanButtons from "@/components/rihla/VinScanButtons";
 
 type ApvConfirmationPayload = {
   kind: "appointment" | "complaint";
@@ -148,7 +149,11 @@ export function WidgetBubble({ brand, availableLangs, embedded = false, postSize
   // Bumped each time the assistant's transcript hints that the user should
   // type something (name, phone). The CallView watches this and auto-opens
   // the inline keyboard so the user doesn't have to find the icon.
-  const [typeRequest, setTypeRequest] = useState<{ id: number; placeholder?: string } | null>(null);
+  const [typeRequest, setTypeRequest] = useState<{
+    id: number;
+    placeholder?: string;
+    kind?: "vin" | "email" | "phone" | "name";
+  } | null>(null);
   const lastTypeRequestSnippetRef = useRef<string>("");
 
   useEffect(() => {
@@ -216,7 +221,11 @@ export function WidgetBubble({ brand, availableLangs, embedded = false, postSize
       const detected = detectTypeRequest(text, voiceLang);
       if (detected && detected.snippet !== lastTypeRequestSnippetRef.current) {
         lastTypeRequestSnippetRef.current = detected.snippet;
-        setTypeRequest({ id: Date.now(), placeholder: detected.placeholder });
+        setTypeRequest({
+          id: Date.now(),
+          placeholder: detected.placeholder,
+          kind: detected.kind,
+        });
       }
     }
   }, [voiceLang]);
@@ -618,7 +627,7 @@ type PanelProps = {
   accent: string;
   onClose: (() => void) | null;
   callImage: ImageCardPayload | null;
-  typeRequest: { id: number; placeholder?: string } | null;
+  typeRequest: { id: number; placeholder?: string; kind?: "vin" | "email" | "phone" | "name" } | null;
 };
 
 function BubblePanel(p: PanelProps) {
@@ -736,6 +745,23 @@ function BubblePanel(p: PanelProps) {
             </div>
 
             <div className="border-t border-black/[0.06] bg-white px-3 pb-3 pt-2.5">
+              {/* VIN scan affordance — surfaces when the agent's last reply
+                  asked for a chassis number. Lets the customer photograph or
+                  upload their carte grise instead of typing 17 chars. */}
+              {p.typeRequest?.kind === "vin" && (
+                <div className="mb-2 flex justify-center">
+                  <VinScanButtons
+                    accent={p.accent}
+                    locale={p.voiceLang}
+                    onConfirm={(vin) => {
+                      p.setInput(vin);
+                      // Defer handleSend by a tick so the controlled textarea
+                      // sees the new value before the submit fires.
+                      setTimeout(() => p.handleSend(), 0);
+                    }}
+                  />
+                </div>
+              )}
               <div className="flex items-end gap-1.5 rounded-2xl border border-black/[0.08] bg-[#fafafa] p-1.5 transition focus-within:border-black/20 focus-within:shadow-[0_0_0_4px_rgba(0,0,0,0.04)]">
                 <textarea
                   value={p.input}
@@ -892,7 +918,7 @@ function switchToVoiceLabel(lang: VoiceLang | null): string {
 function detectTypeRequest(
   chunk: string,
   lang: VoiceLang | null
-): { snippet: string; placeholder?: string } | null {
+): { snippet: string; placeholder?: string; kind?: "vin" | "email" | "phone" | "name" } | null {
   const lower = chunk.toLowerCase();
   // VIN / chassis triggers — highest priority, since voice dictation of a 17-char
   // alphanumeric run is unreliable. Pop the keyboard so the customer can type
@@ -906,7 +932,7 @@ function detectTypeRequest(
   ];
   for (const re of vinMatchers) {
     if (re.test(chunk)) {
-      return { snippet: chunk.slice(0, 60), placeholder: vinPlaceholder(lang) };
+      return { snippet: chunk.slice(0, 60), placeholder: vinPlaceholder(lang), kind: "vin" };
     }
   }
   // Email triggers — pop the keyboard with an email-shaped placeholder.
@@ -916,7 +942,7 @@ function detectTypeRequest(
   ];
   for (const re of emailMatchers) {
     if (re.test(chunk)) {
-      return { snippet: chunk.slice(0, 60), placeholder: emailPlaceholder(lang) };
+      return { snippet: chunk.slice(0, 60), placeholder: emailPlaceholder(lang), kind: "email" };
     }
   }
   // Phone-number triggers (more specific than name). Two tiers:
@@ -939,7 +965,7 @@ function detectTypeRequest(
   ];
   for (const re of [...phoneStrict, ...phoneLoose]) {
     if (re.test(chunk)) {
-      return { snippet: chunk.slice(0, 60), placeholder: phonePlaceholder(lang) };
+      return { snippet: chunk.slice(0, 60), placeholder: phonePlaceholder(lang), kind: "phone" };
     }
   }
   // Name triggers — same two-tier strategy.
@@ -957,7 +983,7 @@ function detectTypeRequest(
   ];
   for (const re of [...nameStrict, ...nameLoose]) {
     if (re.test(chunk)) {
-      return { snippet: chunk.slice(0, 60), placeholder: namePlaceholder(lang) };
+      return { snippet: chunk.slice(0, 60), placeholder: namePlaceholder(lang), kind: "name" };
     }
   }
   // Lower-priority "in the chat / in the box" hint without a specific field.

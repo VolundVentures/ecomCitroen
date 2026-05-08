@@ -45,18 +45,32 @@ export async function POST(req: NextRequest) {
       succeeded: true,
     });
 
-    if (body.name === "book_test_drive") {
+    if (body.name === "book_test_drive" || body.name === "book_showroom_visit") {
       const i = body.input;
-      if (typeof i.firstName === "string" && typeof i.phone === "string" && typeof i.slug === "string") {
+      if (typeof i.firstName === "string" && typeof i.phone === "string") {
+        // book_showroom_visit may not carry a model slug (the customer is
+        // visiting the maison, not necessarily a specific car) — pass empty
+        // string in that case rather than refusing to sync.
+        const modelSlug = typeof i.slug === "string" ? i.slug : "";
+        const kindNote = body.name === "book_showroom_visit" ? "kind: showroom-visit" : undefined;
+        console.log(
+          `[voice/tool] ${body.name} → captureLeadFromBooking firstName=${i.firstName} model=${modelSlug || "-"}`
+        );
         await captureLeadFromBooking({
           conversationId: body.conversationId,
           brandSlug: body.brandSlug,
-          modelSlug: i.slug,
+          modelSlug,
           firstName: i.firstName,
           phone: i.phone,
           city: typeof i.city === "string" ? i.city : undefined,
           preferredSlot: typeof i.preferredSlot === "string" ? i.preferredSlot : undefined,
+          showroomName: typeof i.showroomName === "string" ? i.showroomName : undefined,
+          notes: kindNote,
         });
+      } else {
+        console.warn(
+          `[voice/tool] ${body.name} skipped — missing firstName or phone (got keys=${Object.keys(i).join(",")})`
+        );
       }
     } else if (body.name === "book_service_appointment") {
       const result = await persistAppointment({
@@ -67,7 +81,16 @@ export async function POST(req: NextRequest) {
       console.log(
         `[voice/tool] book_service_appointment ok=${result.ok} ref=${result.refNumber} warnings=${result.warnings.join("|") || "-"}`
       );
-      return Response.json({ ok: true, refNumber: result.refNumber, warnings: result.warnings });
+      // We deliberately do NOT return `warnings` to the voice model — these
+      // are backend validation flags (e.g. "vin-format: too-long") meant for
+      // the dealer back-office, NOT for the customer. The model was reading
+      // them as a failure and announcing an error to a customer whose case
+      // had actually been created successfully.
+      return Response.json({
+        ok: true,
+        refNumber: result.refNumber,
+        message: `Appointment saved. Reference: ${result.refNumber}.`,
+      });
     } else if (body.name === "submit_complaint") {
       const result = await persistComplaint({
         brandSlug: body.brandSlug,
@@ -77,7 +100,11 @@ export async function POST(req: NextRequest) {
       console.log(
         `[voice/tool] submit_complaint ok=${result.ok} ref=${result.refNumber} warnings=${result.warnings.join("|") || "-"}`
       );
-      return Response.json({ ok: true, refNumber: result.refNumber, warnings: result.warnings });
+      return Response.json({
+        ok: true,
+        refNumber: result.refNumber,
+        message: `Complaint saved. Reference: ${result.refNumber}.`,
+      });
     }
   } else if (body.kind === "end") {
     await closeConversation(body.conversationId, "closed_no_lead");

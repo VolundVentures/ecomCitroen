@@ -343,6 +343,30 @@ function modelLabelFromSlug(slug: string): string {
   return JEEP_MODEL_LABELS[slug] ?? slug;
 }
 
+// Stellantis Salesforce stores Date_de_RDV__c as a DateTime field, not a Date —
+// it rejects bare YYYY-MM-DD with a misleading "field-level security" error
+// (confirmed by NBS, May 2026). We combine the customer-chosen date with a
+// representative time per slot and emit ISO 8601 in UTC.
+//   morning   → 09:00 UTC ≈ 10:00 Casablanca
+//   afternoon → 14:00 UTC ≈ 15:00 Casablanca
+//
+// Defensive: only emit the datetime if `date` strictly matches YYYY-MM-DD with
+// a 4-digit year. The agent has been observed hallucinating malformed years
+// like "y009-05-31"; if the upstream validator misses it, fall back to
+// tomorrow rather than crash Salesforce with a JSON_PARSER_ERROR.
+function toAppointmentDateTime(date: string, slot: "morning" | "afternoon"): string {
+  const hour = slot === "afternoon" ? "14" : "09";
+  const safe = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? date
+    : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (safe !== date) {
+    console.warn(
+      `[salesforce/case] malformed preferredDate "${date}" — falling back to ${safe}`
+    );
+  }
+  return `${safe}T${hour}:00:00.000Z`;
+}
+
 export function buildJeepApvAppointmentCase(input: JeepApvAppointmentInput): CasePayload {
   const fullName = input.fullName.trim() || "(non communiqué)";
   const interventionFr =
@@ -373,7 +397,7 @@ export function buildJeepApvAppointmentCase(input: JeepApvAppointmentInput): Cas
     Type: "Prise de RDV",
     ...(RECORD_TYPE_RDV_SAV ? { RecordTypeId: RECORD_TYPE_RDV_SAV } : {}),
     Numero_de_chassis__c: input.vin.trim().toUpperCase(),
-    Date_de_RDV__c: input.preferredDate,
+    Date_de_RDV__c: toAppointmentDateTime(input.preferredDate, input.preferredSlot),
   };
 }
 
